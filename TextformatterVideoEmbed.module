@@ -1,0 +1,224 @@
+<?php
+
+/**
+ * ProcessWire Video Embedding Textformatter
+ *
+ * Looks for Youtube or Vimeo URLs and automatically converts them to embeds
+ *
+ * ProcessWire 2.x 
+ * Copyright (C) 2012 by Ryan Cramer 
+ * Licensed under GNU/GPL v2, see LICENSE.TXT
+ * 
+ * http://www.processwire.com
+ * http://www.ryancramer.com
+ *
+ *
+ */
+
+class TextformatterVideoEmbed extends Textformatter implements ConfigurableModule {
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'Video embed for YouTube/Vimeo', 
+			'version' => 100, 
+			'summary' => 
+				"Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. " . 
+				"This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.", 
+			); 
+	}
+
+	const dbTableName = 'textformatter_video_embed';
+
+	protected static $configDefaults = array(
+		'maxWidth' => 640, 
+		'maxHeight' => 480,
+		); 
+
+	/**
+	 * Data as used by the get/set functions
+	 *
+	 */
+	protected $data = array();
+
+	/**
+	 * Set our configuration defaults
+	 *
+	 */
+	public function __construct() {
+		foreach(self::$configDefaults as $key => $value) {
+			$this->set($key, $value); 
+		}
+	}	
+
+	/**
+	 * Given a service oembed URL and video ID, return the corresponding embed code.
+	 *
+	 * A cached version of the embed code will be used if possible. When not possible, 
+	 * it will be retrieved from the service's oembed URL, and then cached. 
+	 *
+	 */
+	protected function getEmbedCode($oembedURL, $videoID) {
+
+		$db = wire('db'); 
+		$videoID = $db->escape_string($videoID); 
+		$result = $db->query("SELECT embed_code FROM " . self::dbTableName . " WHERE video_id='$videoID'"); 
+
+		if($result->num_rows) {
+			list($embedCode) = $result->fetch_row(); 
+			return $embedCode; 
+		}
+
+		$data = file_get_contents($oembedURL); 
+
+		if($data) $data = json_decode($data, true);
+
+		if(is_array($data) && isset($data['html'])) {
+
+			$embedCode = $data['html'];
+
+			$sql = 	"INSERT INTO " . self::dbTableName . " SET " . 
+				"video_id='$videoID', " . 
+				"embed_code='" . $db->escape_string($embedCode) . "', " . 
+				"created=NOW() ";
+
+			$db->query($sql);
+		}
+
+		$result->free();
+		return $embedCode; 
+	}
+
+	/**
+	 * Text formatting function as used by the Textformatter interface
+	 *
+	 * Here we look for video codes on first pass using a fast strpos() function.
+	 * When found, we do our second pass with preg_match_all and replace the video URLs
+	 * with the proper embed codes obtained from each service's oembed web service.
+	 *
+	 */
+	public function format(&$str) {
+
+		// YOUTUBE
+		if(strpos($str, 'http://www.youtube.com/watch') !== false || strpos($str, 'http://www.youtube.com/v/') !== false) {
+			if(preg_match_all('#<p>\s*(http://www.youtube.com/(?:watch/?\?v=|v/)([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
+				foreach($matches[0] as $key => $line) { 
+					$oembedURL = "http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . "&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
+					$videoID = $matches[2][$key]; 
+					$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+					if($embedCode) $str = str_replace($line, $embedCode, $str); 
+				}
+			}
+		}
+
+		// VIMEO
+		if(strpos($str, 'http://vimeo.com/') !== false) {
+			if(preg_match_all('#<p>\s*(http://vimeo.com/(\d+)).*?</p>#', $str, $matches)) {
+				foreach($matches[0] as $key => $line) { 
+					$oembedURL = "http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . "&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
+					$videoID = $matches[2][$key]; 
+					$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+					if($embedCode) $str = str_replace($line, $embedCode, $str); 
+				}
+			}
+		}
+	}
+
+	/**
+	 * Module configuration screen
+	 *
+	 */
+	public static function getModuleConfigInputfields(array $data) {
+
+		foreach(self::$configDefaults as $key => $value) {
+			if(!isset($data[$key])) $data[$key] = $value;
+		}
+
+		unset($data['cacheClear']);
+		$inputfields = new InputfieldWrapper();
+
+		$f = wire('modules')->get('InputfieldInteger'); 
+		$f->attr('name', 'maxWidth');
+		$f->attr('value', $data['maxWidth']); 
+		$f->label = 'Max Video Width'; 
+		$inputfields->add($f); 
+
+		$f = wire('modules')->get('InputfieldInteger'); 
+		$f->attr('name', 'maxHeight');
+		$f->attr('value', $data['maxHeight']); 
+		$f->label = 'Max Video Height'; 
+		$inputfields->add($f); 
+
+		if(wire('input')->post('clearCache')) {
+			wire('db')->query("DELETE FROM " . self::dbTableName); 
+			wire('modules')->message("Cleared video embed cache"); 
+		} else {
+			$result = wire('db')->query("SELECT COUNT(*) FROM " . self::dbTableName); 
+			list($n) = $result->fetch_row();
+			$f = wire('modules')->get('InputfieldCheckbox');
+			$f->attr('name', 'clearCache'); 
+			$f->attr('value', 1); 
+			$f->label = "Clear video cache?";
+			$f->description = "This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled from YouTube/Vimeo as needed.";
+			$f->notes = "There are currently $n video(s) cached";
+			$inputfields->add($f); 
+		}
+
+		return $inputfields; 		
+	}
+
+	/**
+	 * Installation routine
+	 *
+	 */
+	public function ___install() {
+
+		if(!ini_get('allow_url_fopen')) {
+			throw new WireException("Your PHP has allow_url_fopen disabled, which is required by this module."); 
+		}
+
+		$sql =	"CREATE TABLE " . self::dbTableName . " (" . 
+			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " . 
+			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " . 
+			"created TIMESTAMP NOT NULL " . 
+			")";
+
+		wire('db')->query($sql);
+
+	}
+
+	/**
+	 * Uninstallation routine
+	 *
+	 */
+	public function ___uninstall() {
+		try { wire('db')->query("DROP TABLE " . self::dbTableName); } catch(Exception $e) { }
+	}
+
+
+	/**
+	 * The following functions are to support the ConfigurableModule interface
+	 * since Textformatter does not originate from WireData
+	 *
+	 */
+
+	public function set($key, $value) {
+		$this->data[$key] = $value; 
+		return $this;
+	}
+
+	public function get($key) {
+		$value = Wire::getFuel($key); 
+		if($value) return $value; 
+		return isset($this->data[$key]) ? $this->data[$key] : null;
+	}
+
+	public function __set($key, $value) {
+		$this->set($key, $value); 
+	}
+
+	public function __get($key) {
+		return $this->get($key);
+	}
+
+
+}
