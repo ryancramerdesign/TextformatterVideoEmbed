@@ -14,17 +14,19 @@ ProcessWire Textformatter module that enables translation of YouTube or Vimeo UR
 
 - Edit a page using the field you edited and paste in YouTube and/or Vimeo video URLs each on their own paragraph. 
 
-### Example (pretend you are pasting this in TinyMCE): 
+### Example 
 
-   Here are two videos about ProcessWire
+How it might look in your editor (like TinyMCE): 
 
-   http://www.youtube.com/watch?v=Wl4XiYadV_k
-
-   http://www.youtube.com/watch?v=XKnG7sikE-U 
-
-   And here is a great video I watched earlier this week:
-
-   http://vimeo.com/18280328
+> Here are two videos about ProcessWire
+>
+> http://www.youtube.com/watch?v=Wl4XiYadV_k
+> 
+> http://www.youtube.com/watch?v=XKnG7sikE-U 
+> 
+> And here is a great video I watched earlier this week:
+> 
+> http://vimeo.com/18280328
 
 ## How it works
 
@@ -37,4 +39,16 @@ The advantage of using the oEmbed services is that you get a video formatted at 
 You may want to update the max width and max height settings on the module's configuration screen. You should make these consistent with what is supported by your site design. 
 
 If you change these max width / max height settings you may also want to check the box to **clear cache**, so that YouTube/Vimeo oembed services will generate new embed codes for you. 
+
+### Using with Markdown, Textile or other LML
+
+This text formatter is looking for a YouTube or Vimeo video URL surrounded by paragraph tags, like this:
+
+` <p>http://vimeo.com/18280328</p>
+
+As a result, if you are using Markdown or Textile (or something else like it) you want that text formatter to run before this one. That ensures that the expected paragraph tags will be present when TextformatterVideoEmbed runs. 
+You can control the order that text formatters are run in by drag/drop sorting in the field editor.
+
+------
+Copyright 2012 by Ryan Cramer
 
