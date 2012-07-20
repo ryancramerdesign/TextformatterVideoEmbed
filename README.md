@@ -45,7 +45,7 @@ If you change these max width / max height settings you may also want to check t
 This text formatter is looking for a YouTube or Vimeo video URL surrounded by paragraph tags, like this:
 
 <code>
-<p>http://vimeo.com/18280328</p>
+&lt;p&gt;http://vimeo.com/18280328&lt;/p&gt; 
 </code>
 
 As a result, if you are using Markdown or Textile (or something else like it) you want that text formatter to run before this one. That ensures that the expected paragraph tags will be present when TextformatterVideoEmbed runs. 
