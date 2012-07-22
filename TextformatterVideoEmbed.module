@@ -99,8 +99,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public function format(&$str) {
 
 		// YOUTUBE
-		if(strpos($str, 'http://www.youtube.com/watch') !== false || strpos($str, 'http://www.youtube.com/v/') !== false) {
-			if(preg_match_all('#<p>\s*(http://www.youtube.com/(?:watch/?\?v=|v/)([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
+		if(strpos($str, '://www.youtube.com/watch') !== false || strpos($str, '://www.youtube.com/v/') !== false) {
+			if(preg_match_all('#<p>\s*(https?://www.youtube.com/(?:watch/?\?v=|v/)([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
 				foreach($matches[0] as $key => $line) { 
 					$oembedURL = "http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . "&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 					$videoID = $matches[2][$key]; 
@@ -111,8 +111,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		}
 
 		// VIMEO
-		if(strpos($str, 'http://vimeo.com/') !== false) {
-			if(preg_match_all('#<p>\s*(http://vimeo.com/(\d+)).*?</p>#', $str, $matches)) {
+		if(strpos($str, '://vimeo.com/') !== false) {
+			if(preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) {
 				foreach($matches[0] as $key => $line) { 
 					$oembedURL = "http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . "&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 					$videoID = $matches[2][$key]; 
