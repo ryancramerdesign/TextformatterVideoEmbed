@@ -20,7 +20,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Video embed for YouTube/Vimeo', 
-			'version' => 100, 
+			'version' => 101, 
 			'summary' => 
 				"Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. " . 
 				"This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.", 
@@ -99,8 +99,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public function format(&$str) {
 
 		// YOUTUBE
-		if(strpos($str, '://www.youtube.com/watch') !== false || strpos($str, '://www.youtube.com/v/') !== false) {
-			if(preg_match_all('#<p>\s*(https?://www.youtube.com/(?:watch/?\?v=|v/)([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
+		if(strpos($str, '://www.youtube.com/watch') !== false || strpos($str, '://www.youtube.com/v/') !== false || strpos($str, '://youtu.be/') !== false) {
+			if(preg_match_all('#<p>\s*(https?://(www\.)?youtu(.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
 				foreach($matches[0] as $key => $line) { 
 					$oembedURL = "http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . "&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 					$videoID = $matches[2][$key]; 
