@@ -20,7 +20,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Video embed for YouTube/Vimeo', 
-			'version' => 100, 
+			'version' => 101, 
 			'summary' => 
 				"Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. " . 
 				"This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.", 
