@@ -100,7 +100,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		// YOUTUBE
 		if(strpos($str, '://www.youtube.com/watch') !== false || strpos($str, '://www.youtube.com/v/') !== false || strpos($str, '://youtu.be/') !== false) {
-			if(preg_match_all('#<p>\s*(https?://(www\.)?youtu(.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
+			if(preg_match_all('#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+)).*?</p>#', $str, $matches)) {
 				foreach($matches[0] as $key => $line) { 
 					$oembedURL = "http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . "&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 					$videoID = $matches[2][$key]; 
