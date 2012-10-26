@@ -9,8 +9,9 @@
  * Copyright (C) 2012 by Ryan Cramer 
  * Licensed under GNU/GPL v2, see LICENSE.TXT
  * 
- * http://www.processwire.com
- * http://www.ryancramer.com
+ * http://processwire.com
+ *
+ * 1.0.4: Added 'responsive' option and made text translatable.
  *
  *
  */
@@ -19,11 +20,11 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	public static function getModuleInfo() {
 		return array(
-			'title' => 'Video embed for YouTube/Vimeo', 
-			'version' => 103, 
-			'summary' => 
-				"Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. " . 
-				"This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.", 
+			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
+			'version' => 104, 
+			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
+			'author' => 'Ryan Cramer',
+			'href' => 'http://modules.processwire.com/modules/textformatter-video-embed/'
 			); 
 	}
 
@@ -32,6 +33,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	protected static $configDefaults = array(
 		'maxWidth' => 640, 
 		'maxHeight' => 480,
+		'responsive' => 0,
 		); 
 
 	/**
@@ -89,6 +91,16 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	}
 
 	/**
+	 * Make an iframe-based embed code responsive
+	 *
+	 */
+	protected function makeResponsive($out) {
+		$out = str_ireplace('<iframe ', "<iframe style='position:absolute;top:0;left:0;width:100%;height:100%;' ", $out);
+		$out = "<div class='TextformatterVideoEmbed' style='position:relative;padding:30px 0 56.25% 0;height:0;overflow:hidden;'>$out</div>";
+		return $out;
+	}
+
+	/**
 	 * Text formatting function as used by the Textformatter interface
 	 *
 	 * Here we look for video codes on first pass using a fast strpos() function.
@@ -97,45 +109,67 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function format(&$str) {
+		$this->embedYoutube($str);
+		$this->embedVimeo($str);
+	}
 
-		// YOUTUBE
-		if(strpos($str, '://www.youtube.com/watch') !== false || strpos($str, '://www.youtube.com/v/') !== false || strpos($str, '://youtu.be/') !== false) {
-			//                        1: full URL                                                 2:video id    3: query string (optional)
-			if(preg_match_all('#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#', $str, $matches)) {
+	/**
+	 * Check for Youtube URLS and embed when found
+	 *
+	 */
+	protected function embedYoutube(&$str) {
 
-				foreach($matches[0] as $key => $line) { 
+		// perform a strpos fast check before performing regex check
+		if(strpos($str, '://www.youtube.com/watch') === false && strpos($str, '://www.youtube.com/v/') === false && strpos($str, '://youtu.be/') === false) return;
 
-					$oembedURL = "http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . "&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
-					$videoID = $matches[2][$key]; 
-					$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
-					$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+		//               1: full URL                                                 2:video id    3: query string (optional)
+		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
+		if(!preg_match_all($regex, $str, $matches)) return;
 
-					if($embedCode) {
-						if(strlen($queryString)) {
-							$queryString = str_replace('&amp;', '&', $queryString);
-							$queryString = trim($queryString, '&');
-							$embedCode = str_replace("?", "?$queryString&", $embedCode);
-						}
-						$str = str_replace($line, $embedCode, $str); 
-					}
+		foreach($matches[0] as $key => $line) { 
+
+			$oembedURL = 
+				"http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . 
+				"&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
+
+			$videoID = $matches[2][$key]; 
+			$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+
+			if($embedCode) {
+				if(strlen($queryString)) {
+					$queryString = str_replace('&amp;', '&', $queryString);
+					$queryString = trim($queryString, '&');
+					$embedCode = str_replace("?", "?$queryString&", $embedCode);
 				}
+				if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+				$str = str_replace($line, $embedCode, $str); 
 			}
 		}
 
-		// VIMEO
-		if(strpos($str, '://vimeo.com/') !== false) {
+	}
 
-			if(preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) {
+	/**
+	 * Check for Vimeo URLS and embed when found
+	 *
+	 */
+	protected function embedVimeo(&$str) {
 
-				foreach($matches[0] as $key => $line) { 
+		if(strpos($str, '://vimeo.com/') === false) return;
 
-					$oembedURL = "http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . "&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
-					$videoID = $matches[2][$key]; 
-					$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+		if(!preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) return;
 
-					if($embedCode) $str = str_replace($line, $embedCode, $str); 
-				}
-			}
+		foreach($matches[0] as $key => $line) { 
+
+			$oembedURL = 
+				"http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
+
+			$videoID = $matches[2][$key]; 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+
+			if($embedCode) $str = str_replace($line, $embedCode, $str); 
 		}
 	}
 
@@ -155,27 +189,35 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f = wire('modules')->get('InputfieldInteger'); 
 		$f->attr('name', 'maxWidth');
 		$f->attr('value', $data['maxWidth']); 
-		$f->label = 'Max Video Width'; 
+		$f->label = __('Max Video Width'); 
 		$inputfields->add($f); 
 
 		$f = wire('modules')->get('InputfieldInteger'); 
 		$f->attr('name', 'maxHeight');
 		$f->attr('value', $data['maxHeight']); 
-		$f->label = 'Max Video Height'; 
+		$f->label = __('Max Video Height'); 
+		$inputfields->add($f); 
+
+		$f = wire('modules')->get('InputfieldCheckbox'); 
+		$f->attr('name', 'responsive');
+		$f->attr('value', 1); 
+		if($data['responsive']) $f->attr('checked', 'checked'); 
+		$f->label = __('Use Responsive Embed Method?'); 
+		$f->description = __('When checked, videos will be embedded in a manner that allows them to be presented in a width-flexible format.'); 
 		$inputfields->add($f); 
 
 		if(wire('input')->post('clearCache')) {
 			wire('db')->query("DELETE FROM " . self::dbTableName); 
-			wire('modules')->message("Cleared video embed cache"); 
+			wire('modules')->message(__('Cleared video embed cache')); 
 		} else {
 			$result = wire('db')->query("SELECT COUNT(*) FROM " . self::dbTableName); 
 			list($n) = $result->fetch_row();
 			$f = wire('modules')->get('InputfieldCheckbox');
 			$f->attr('name', 'clearCache'); 
 			$f->attr('value', 1); 
-			$f->label = "Clear video cache?";
-			$f->description = "This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled from YouTube/Vimeo as needed.";
-			$f->notes = "There are currently $n video(s) cached";
+			$f->label = __('Clear video cache?');
+			$f->description = __('This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled from YouTube/Vimeo as needed.');
+			$f->notes = sprintf(__('There are currently %d video(s) cached'), $n);
 			$inputfields->add($f); 
 		}
 

@@ -8,6 +8,8 @@ ProcessWire Textformatter module that enables translation of YouTube or Vimeo UR
 
 - Click *check for new modules* in ProcessWire Admin Modules screen. Click *install* for the module labeled: "Video embed for YouTube/Vimeo".
 
+- Now you will be on the module config screen. Please make note of the config options and set as you see fit.
+
 ## How to use
 
 - Edit your *body* field in Setup > Fields (or whatever field(s) you will be placing videos in). On the *details* tab, find the *Text Formatters* field and select "Video embed for YouTube/Vimeo". Save. 
