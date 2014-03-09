@@ -21,7 +21,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
-			'version' => 105, 
+			'version' => 106, 
 			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
 			'author' => 'Ryan Cramer',
 			'href' => 'http://modules.processwire.com/modules/textformatter-video-embed/'
@@ -94,6 +94,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		}
 
 		$result->free();
+		// account for possibility that stored embed code contains http version while requested on https
+		if($this->http == 'https') $embedCode = str_replace('http://', 'https://', $embedCode); 
 		return $embedCode; 
 	}
 
