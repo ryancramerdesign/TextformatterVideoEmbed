@@ -33,6 +33,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	protected static $configDefaults = array(
 		'maxWidth' => 640, 
 		'maxHeight' => 480,
+		'related' => 1,
 		'responsive' => 0,
 		); 
 
@@ -141,7 +142,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				"$this->http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . 
 				"&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 
-			$videoID = $matches[2][$key]; 
+			$videoID = $matches[2][$key];
+			if(!$this->related) $queryString = 'rel=0';
+			$queryString .= isset($matches[3][$key]) ? $matches[3][$key] : '';
 			$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
 			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
 
@@ -205,6 +208,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->attr('name', 'maxHeight');
 		$f->attr('value', $data['maxHeight']); 
 		$f->label = __('Max Video Height'); 
+		$inputfields->add($f);
+		
+		$f = wire('modules')->get('InputfieldCheckbox'); 
+		$f->attr('name', 'related');
+		$f->attr('value', 1); 
+		if($data['related']) $f->attr('checked', 'checked'); 
+		$f->label = __('Related videos?'); 
+		$f->description = __('When checked, related videos will be shown.');
 		$inputfields->add($f); 
 
 		$f = wire('modules')->get('InputfieldCheckbox'); 
