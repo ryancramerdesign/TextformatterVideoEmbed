@@ -68,12 +68,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 */
 	protected function getEmbedCode($oembedURL, $videoID) {
 
-		$db = wire('db'); 
-		$videoID = $db->escape_string($videoID); 
-		$result = $db->query("SELECT embed_code FROM " . self::dbTableName . " WHERE video_id='$videoID'"); 
+		$database = wire('database'); 
+		$videoID = $database->escape_string($videoID);
+		$result = $database->query("SELECT embed_code FROM " . self::dbTableName . " WHERE video_id='$videoID'"); 
 
-		if($result->num_rows) {
-			list($embedCode) = $result->fetch_row(); 
+		if($result->rowCount()) {
+
+			list($embedCode) = $result->fetch(); 
 
 		} else {
 
@@ -87,14 +88,15 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 				$sql = 	"INSERT INTO " . self::dbTableName . " SET " . 
 					"video_id='$videoID', " . 
-					"embed_code='" . $db->escape_string($embedCode) . "', " . 
+					"embed_code='" . $database->escape_string($embedCode) . "', " . 
 					"created=NOW() ";
 
-				$db->query($sql);
+				$database->query($sql);
 			}
 
-			$result->free();
 		}
+
+		$result->closeCursor();
 
 		// account for possibility that stored embed code contains http version while requested on https
 		if($this->http == 'https') $embedCode = str_replace('http://', 'https://', $embedCode); 
@@ -261,7 +263,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function ___uninstall() {
-		try { wire('db')->query("DROP TABLE " . self::dbTableName); } catch(Exception $e) { }
+		try { wire('database')->query("DROP TABLE " . self::dbTableName); } catch(Exception $e) { }
 	}
 
 
