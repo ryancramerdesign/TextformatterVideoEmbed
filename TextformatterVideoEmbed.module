@@ -254,7 +254,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			"created TIMESTAMP NOT NULL " . 
 			")";
 
-		wire('db')->query($sql);
+		wire('database')->query($sql);
 
 	}
 
