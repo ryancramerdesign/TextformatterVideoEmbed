@@ -48,5 +48,5 @@ This text formatter is looking for a YouTube or Vimeo video URL surrounded by pa
 That ensures that the expected paragraph tags will be present when TextformatterVideoEmbed runs.  You can control the order that text formatters are run in by drag/drop sorting in the field editor.
 
 ------
-Copyright 2012 by Ryan Cramer
+Copyright 2016 by Ryan Cramer
 

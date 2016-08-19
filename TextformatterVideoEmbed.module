@@ -5,14 +5,13 @@
  *
  * Looks for Youtube or Vimeo URLs and automatically converts them to embeds
  *
- * ProcessWire 2.x 
- * Copyright (C) 2012 by Ryan Cramer 
- * Licensed under GNU/GPL v2, see LICENSE.TXT
- * 
- * http://processwire.com
+ * Copyright (C) 2016 by Ryan Cramer 
+ * Licensed under MPL 2.0
+ * https://processwire.com
  *
- * 1.0.4: Added 'responsive' option and made text translatable.
- *
+ * @property int $maxWidth
+ * @property int $maxHeight
+ * @property int $responsive
  *
  */
 
@@ -21,7 +20,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
-			'version' => 109, 
+			'version' => 111, 
 			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
 			'author' => 'Ryan Cramer',
 			'href' => 'http://modules.processwire.com/modules/textformatter-video-embed/'
@@ -30,6 +29,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	const dbTableName = 'textformatter_video_embed';
 
+	/**
+	 * Default configuration values
+	 * 
+	 * @var array
+	 * 
+	 */
 	protected static $configDefaults = array(
 		'maxWidth' => 640, 
 		'maxHeight' => 480,
@@ -64,36 +69,47 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 * A cached version of the embed code will be used if possible. When not possible, 
 	 * it will be retrieved from the service's oembed URL, and then cached. 
+	 * 
+	 * @param string $oembedURL
+	 * @param string $videoID
+	 * @return string
 	 *
 	 */
 	protected function getEmbedCode($oembedURL, $videoID) {
 
-		$db = wire('db'); 
-		$videoID = $db->escape_string($videoID); 
-		$result = $db->query("SELECT embed_code FROM " . self::dbTableName . " WHERE video_id='$videoID'"); 
+		$database = $this->wire('database');
+		$table = self::dbTableName;
+		$query = $database->prepare("SELECT embed_code FROM $table WHERE video_id=:video_id"); 
+		$query->bindValue(":video_id", $videoID); 
+		$query->execute();
 
-		if($result->num_rows) {
-			list($embedCode) = $result->fetch_row(); 
+		$embedCode = '';
+
+		if($query->rowCount()) {
+
+			list($embedCode) = $query->fetch(\PDO::FETCH_NUM); 
+			$query->closeCursor();
 
 		} else {
 
-			$data = file_get_contents($oembedURL); 
-
+			$query->closeCursor();
+			$http = new WireHttp();
+			$data = $http->get($oembedURL); 
 			if($data) $data = json_decode($data, true);
 
 			if(is_array($data) && isset($data['html'])) {
-
 				$embedCode = $data['html'];
 
-				$sql = 	"INSERT INTO " . self::dbTableName . " SET " . 
-					"video_id='$videoID', " . 
-					"embed_code='" . $db->escape_string($embedCode) . "', " . 
+				$sql = 	"INSERT INTO $table SET " . 
+					"video_id=:videoID, " . 
+					"embed_code=:embedCode, " . 
 					"created=NOW() ";
 
-				$db->query($sql);
+				$query = $database->prepare($sql);
+				$query->bindValue(":videoID", $videoID);
+				$query->bindValue(":embedCode", $embedCode);
+				$query->execute();
 			}
-
-			$result->free();
 		}
 
 		// account for possibility that stored embed code contains http version while requested on https
@@ -104,6 +120,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Make an iframe-based embed code responsive
+	 * 
+	 * @param string $out
+	 * @return string
 	 *
 	 */
 	protected function makeResponsive($out) {
@@ -118,6 +137,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * Here we look for video codes on first pass using a fast strpos() function.
 	 * When found, we do our second pass with preg_match_all and replace the video URLs
 	 * with the proper embed codes obtained from each service's oembed web service.
+	 * 
+	 * @var string $str
 	 *
 	 */
 	public function format(&$str) {
@@ -127,12 +148,16 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Check for Youtube URLS and embed when found
+	 * 
+	 * @var string $str
 	 *
 	 */
 	protected function embedYoutube(&$str) {
 
 		// perform a strpos fast check before performing regex check
-		if(strpos($str, '://www.youtube.com/watch') === false && strpos($str, '://www.youtube.com/v/') === false && strpos($str, '://youtu.be/') === false) return;
+		if(strpos($str, '://www.youtube.com/watch') === false 
+			&& strpos($str, '://www.youtube.com/v/') === false 
+			&& strpos($str, '://youtu.be/') === false) return;
 
 		//               1: full URL                                                 2:video id    3: query string (optional)
 		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
@@ -163,6 +188,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Check for Vimeo URLS and embed when found
+	 * 
+	 * @var string $str
 	 *
 	 */
 	protected function embedVimeo(&$str) {
@@ -187,9 +214,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Module configuration screen
+	 * 
+	 * @param array $data
+	 * @return InputfieldWrapper
 	 *
 	 */
-	public static function getModuleConfigInputfields(array $data) {
+	public function getModuleConfigInputfields(array $data) {
 
 		foreach(self::$configDefaults as $key => $value) {
 			if(!isset($data[$key])) $data[$key] = $value;
@@ -198,19 +228,19 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		unset($data['cacheClear']);
 		$inputfields = new InputfieldWrapper();
 
-		$f = wire('modules')->get('InputfieldInteger'); 
+		$f = $this->wire('modules')->get('InputfieldInteger'); 
 		$f->attr('name', 'maxWidth');
 		$f->attr('value', $data['maxWidth']); 
 		$f->label = __('Max Video Width'); 
 		$inputfields->add($f); 
 
-		$f = wire('modules')->get('InputfieldInteger'); 
+		$f = $this->wire('modules')->get('InputfieldInteger'); 
 		$f->attr('name', 'maxHeight');
 		$f->attr('value', $data['maxHeight']); 
 		$f->label = __('Max Video Height'); 
 		$inputfields->add($f); 
 
-		$f = wire('modules')->get('InputfieldCheckbox'); 
+		$f = $this->wire('modules')->get('InputfieldCheckbox'); 
 		$f->attr('name', 'responsive');
 		$f->attr('value', 1); 
 		if($data['responsive']) $f->attr('checked', 'checked'); 
@@ -218,13 +248,15 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->description = __('When checked, videos will be embedded in a manner that allows them to be presented in a width-flexible format.'); 
 		$inputfields->add($f); 
 
-		if(wire('input')->post('clearCache')) {
-			wire('db')->query("DELETE FROM " . self::dbTableName); 
-			wire('modules')->message(__('Cleared video embed cache')); 
+		if($this->wire('input')->post('clearCache')) {
+			$this->wire('database')->query("DELETE FROM " . self::dbTableName); 
+			$this->wire('modules')->message(__('Cleared video embed cache')); 
 		} else {
-			$result = wire('db')->query("SELECT COUNT(*) FROM " . self::dbTableName); 
-			list($n) = $result->fetch_row();
-			$f = wire('modules')->get('InputfieldCheckbox');
+			$query = $this->wire('database')->prepare("SELECT COUNT(*) FROM " . self::dbTableName); 
+			$query->execute();
+			list($n) = $query->fetch(\PDO::FETCH_NUM);
+			$query->closeCursor();
+			$f = $this->wire('modules')->get('InputfieldCheckbox');
 			$f->attr('name', 'clearCache'); 
 			$f->attr('value', 1); 
 			$f->label = __('Clear video cache?');
@@ -242,17 +274,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 */
 	public function ___install() {
 
-		if(!ini_get('allow_url_fopen')) {
-			throw new WireException("Your PHP has allow_url_fopen disabled, which is required by this module."); 
-		}
-
 		$sql =	"CREATE TABLE " . self::dbTableName . " (" . 
 			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " . 
 			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " . 
 			"created TIMESTAMP NOT NULL " . 
 			")";
 
-		wire('db')->query($sql);
+		$this->wire('database')->exec($sql);
 
 	}
 
@@ -261,23 +289,33 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function ___uninstall() {
-		try { wire('db')->query("DROP TABLE " . self::dbTableName); } catch(Exception $e) { }
+		try { $this->wire('database')->exec("DROP TABLE " . self::dbTableName); } catch(Exception $e) { }
 	}
 
 
 	/**
 	 * The following functions are to support the ConfigurableModule interface
 	 * since Textformatter does not originate from WireData
+	 * 
+	 * @param string $key
+	 * @param mixed $value
+	 * @return $this
 	 *
 	 */
-
 	public function set($key, $value) {
 		$this->data[$key] = $value; 
 		return $this;
 	}
 
+	/**
+	 * Get configuration item
+	 * 
+	 * @param string $key
+	 * @return mixed
+	 *
+	 */
 	public function get($key) {
-		$value = Wire::getFuel($key); 
+		$value = $this->wire($key); 
 		if($value) return $value; 
 		return isset($this->data[$key]) ? $this->data[$key] : null;
 	}
