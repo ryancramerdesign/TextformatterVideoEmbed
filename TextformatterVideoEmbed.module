@@ -12,6 +12,7 @@
  * @property int $maxWidth
  * @property int $maxHeight
  * @property int $responsive
+ * @property float $defaultAspectRatio
  *
  */
 
@@ -20,14 +21,20 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
-			'version' => 111, 
+			'version' => 112, 
 			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
 			'author' => 'Ryan Cramer',
 			'href' => 'http://modules.processwire.com/modules/textformatter-video-embed/'
 			); 
 	}
 
+	/**
+	 * Name and latest schema version for database table used by this module
+	 *
+	 */
+	
 	const dbTableName = 'textformatter_video_embed';
+	const dbSchemaVersion = 2;
 
 	/**
 	 * Default configuration values
@@ -39,6 +46,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'maxWidth' => 640, 
 		'maxHeight' => 480,
 		'responsive' => 0,
+		'defaultAspectRatio' => 16/9,
+		
+		'dbSchemaVersion' => 1,
 		); 
 
 	/**
@@ -63,6 +73,21 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		}
 		$this->http = $this->config->https ? 'https' : 'http';
 	}	
+	
+	/**
+	 * Initialization function
+	 *
+	 * This function updates the database schema, if necessary.
+	 *
+	 */
+	public function init() {
+				
+		// update database schema (if not the latest one yet)
+		if ($this->dbSchemaVersion < self::dbSchemaVersion) {
+			$this->updateDatabaseSchema();
+		}
+
+	}
 
 	/**
 	 * Given a service oembed URL and video ID, return the corresponding embed code.
@@ -79,15 +104,16 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		$database = $this->wire('database');
 		$table = self::dbTableName;
-		$query = $database->prepare("SELECT embed_code FROM $table WHERE video_id=:video_id"); 
+		$query = $database->prepare("SELECT embed_code, aspect_ratio FROM $table WHERE video_id=:video_id"); 
 		$query->bindValue(":video_id", $videoID); 
 		$query->execute();
 
 		$embedCode = '';
+		$aspectRatio = 0;
 
 		if($query->rowCount()) {
 
-			list($embedCode) = $query->fetch(\PDO::FETCH_NUM); 
+			list($embedCode, $aspectRatio) = $query->fetch(\PDO::FETCH_NUM); 
 			$query->closeCursor();
 
 		} else {
@@ -99,18 +125,27 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 			if(is_array($data) && isset($data['html'])) {
 				$embedCode = $data['html'];
+				
+				if(isset($data['width']) && isset($data['height'])) {
+					$aspectRatio = $data['width'] / $data['height'];
+				}
 
 				$sql = 	"INSERT INTO $table SET " . 
 					"video_id=:videoID, " . 
 					"embed_code=:embedCode, " . 
+					"aspect_ratio=:aspectRatio, " . 
 					"created=NOW() ";
 
 				$query = $database->prepare($sql);
 				$query->bindValue(":videoID", $videoID);
 				$query->bindValue(":embedCode", $embedCode);
+				$query->bindValue(":aspectRatio", $aspectRatio);
 				$query->execute();
 			}
 		}
+		
+		// responsive embed codes
+		if($this->responsive) $embedCode = $this->makeResponsive($embedCode, $aspectRatio);
 
 		// account for possibility that stored embed code contains http version while requested on https
 		if($this->http == 'https') $embedCode = str_replace('http://', 'https://', $embedCode); 
@@ -122,12 +157,22 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * Make an iframe-based embed code responsive
 	 * 
 	 * @param string $out
+	 * @param float $aspectRatio
 	 * @return string
 	 *
 	 */
-	protected function makeResponsive($out) {
+	protected function makeResponsive($out, $aspectRatio = 0) {
+		$aspectRatio = floatval($aspectRatio);
+		
+		if(!$aspectRatio) $aspectRatio = $this->defaultAspectRatio;
+
+		// Calculate padding percentage from aspect ratio
+		$padding = (1 / $aspectRatio) * 100;
+		$padding = number_format($padding, 2, '.', '');
+		
 		$out = str_ireplace('<iframe ', "<iframe style='position:absolute;top:0;left:0;width:100%;height:100%;' ", $out);
-		$out = "<div class='TextformatterVideoEmbed' style='position:relative;padding:30px 0 56.25% 0;height:0;overflow:hidden;'>$out</div>";
+		$out = "<div class='TextformatterVideoEmbed' style='position:relative;padding:0 0 $padding% 0;height:0;overflow:hidden;'>$out</div>";
+		
 		return $out;
 	}
 
@@ -179,7 +224,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 					$queryString = trim($queryString, '&');
 					$embedCode = str_replace("?", "?$queryString&", $embedCode);
 				}
-				if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
 				$str = str_replace($line, $embedCode, $str); 
 			}
 		}
@@ -206,7 +250,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 			$videoID = $matches[2][$key]; 
 			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
 
 			if($embedCode) $str = str_replace($line, $embedCode, $str); 
 		}
@@ -246,6 +289,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		if($data['responsive']) $f->attr('checked', 'checked'); 
 		$f->label = __('Use Responsive Embed Method?'); 
 		$f->description = __('When checked, videos will be embedded in a manner that allows them to be presented in a width-flexible format.'); 
+		$inputfields->add($f);
+		
+		$f = $this->wire('modules')->get('InputfieldFloat'); 
+		$f->attr('name', 'defaultAspectRatio');
+		$f->attr('value', $data['defaultAspectRatio']); 
+		$f->label = __('Default Aspect Ratio'); 
+		$f->description = __('This will be used as a fallback if the video\'s aspect ratio can\'t be properly determined from the oEmbed request.'); 
+		$f->notes = __('A sensible default is 1.78 (equals 16:9)');
 		$inputfields->add($f); 
 
 		if($this->wire('input')->post('clearCache')) {
@@ -262,10 +313,37 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$f->label = __('Clear video cache?');
 			$f->description = __('This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled from YouTube/Vimeo as needed.');
 			$f->notes = sprintf(__('There are currently %d video(s) cached'), $n);
-			$inputfields->add($f); 
+			$inputfields->add($f);
 		}
 
 		return $inputfields; 		
+	}
+	
+	/**
+	 * Update database schema
+	 *
+	 * This method applies incremental updates until latest schema version is
+	 * reached, while also keeping schema_version config setting up to date.
+	 *
+	 */
+	private function updateDatabaseSchema() {
+		while ($this->dbSchemaVersion < self::dbSchemaVersion) {
+			++$this->dbSchemaVersion;
+			switch ($this->dbSchemaVersion) {
+				case 2:
+					$sql = "ALTER TABLE " . self::dbTableName . " ADD aspect_ratio FLOAT(6,2) NOT NULL AFTER embed_code";
+					break;
+				default:
+					throw new WireException("Unrecognized database schema version: $this->dbSchemaVersion");
+			}
+			if ($sql && $this->wire('database')->exec($sql) !== false) {
+				$configData = $this->wire('modules')->getModuleConfigData($this);
+				$configData['dbSchemaVersion'] = $this->dbSchemaVersion;
+				$this->wire('modules')->saveModuleConfigData($this, $configData);
+			} else {
+				throw new WireException("Couldn't update database schema to version $this->dbSchemaVersion");
+			}
+		}
 	}
 
 	/**
