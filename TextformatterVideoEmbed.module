@@ -3,7 +3,7 @@
 /**
  * ProcessWire Video Embedding Textformatter
  *
- * Looks for Youtube or Vimeo URLs and automatically converts them to embeds
+ * Looks for Youtube, Vimeo, Instagram, Facebook, Twitter or Issuu URLs and automatically converts them to embeds
  *
  * Copyright (C) 2016 by Ryan Cramer 
  * Licensed under MPL 2.0
@@ -19,9 +19,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	public static function getModuleInfo() {
 		return array(
-			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
-			'version' => 111, 
-			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
+			'title' => __('Video or Social Post Embed', __FILE__), 
+			'version' => 121, 
+			'summary' => __('Enter a full YouTube, Vimeo, Instagram, Facebook, Twitter or Issuu URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video or social post. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
 			'author' => 'Ryan Cramer',
 			'href' => 'http://modules.processwire.com/modules/textformatter-video-embed/'
 			); 
@@ -94,6 +94,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 			$query->closeCursor();
 			$http = new WireHttp();
+			$http->setHeader('User-Agent', 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.13) Gecko/20080311 Firefox/2.0.0.13');
 			$data = $http->get($oembedURL); 
 			if($data) $data = json_decode($data, true);
 
@@ -144,6 +145,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public function format(&$str) {
 		$this->embedYoutube($str);
 		$this->embedVimeo($str);
+		$this->embedIssuu($str);
+		$this->embedTwitter($str);
+		$this->embedFacebook($str);
+		$this->embedInstagram($str);
 	}
 
 	/**
@@ -159,7 +164,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			&& strpos($str, '://www.youtube.com/v/') === false 
 			&& strpos($str, '://youtu.be/') === false) return;
 
-		//               1: full URL                                                 2:video id    3: query string (optional)
+		// 1: full URL | 2:video id | 3: query string (optional)
 		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
 		if(!preg_match_all($regex, $str, $matches)) return;
 
@@ -212,6 +217,129 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		}
 	}
 
+	/**
+	 * Check for Issuu URLS and embed when found
+	 * 
+	 * @var string $str
+	 *
+	 */
+	protected function embedIssuu(&$str) {
+
+		if(strpos($str, '://issuu.com/') === false) return;
+
+		if(!preg_match_all('#<p>\s*(https?://issuu.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
+
+		foreach($matches[0] as $key => $line) { 
+
+			$oembedURL = 
+				"$this->https://issuu.com/oembed?url=" . urlencode($matches[1][$key]) . 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}&format=json"; 
+
+			$videoID = $matches[3][$key]; 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+
+			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+		}
+	}
+
+	/**
+	 * Check for Twitter URLS and embed when found
+	 * 
+	 * @var string $str
+	 *
+	 */
+	protected function embedTwitter(&$str) {
+
+		if(strpos($str, '://twitter.com/') === false) return;
+
+		if(!preg_match_all('#<p>\s*(https?://twitter.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
+
+		foreach($matches[0] as $key => $line) { 
+
+			$oembedURL = 
+				"$this->https://publish.twitter.com/oembed?url=" . urlencode($matches[1][$key]) . 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}&lang=es"; 
+
+			$videoID = 'tw-'.$matches[3][$key]; 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+
+			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+		}
+	}
+
+	/**
+	 * Check for Facebook URLS and embed when found
+	 * 
+	 * @var string $str
+	 *
+	 */
+	protected function embedFacebook(&$str) {
+
+		$pType = '';
+
+		if(strpos($str, '://www.facebook.com/') === false) return;
+
+		if(!preg_match_all('#<p>\s*((https?:\/\/)?(www\.)?facebook.com\/(.*)/(videos|posts)?/(.*)).*?</p>#', $str, $matches)) return;
+
+		foreach($matches[0] as $key => $line) { 
+		
+			$pType = ($matches[5][$key]=='videos' ? 'video':($matches[5][$key]=='posts' ? 'post':''));
+
+			$oembedURL = 
+				"$this->https://www.facebook.com/plugins/{$pType}/oembed.json/?url=" . urlencode($matches[1][$key]) .
+				"&maxwidth={$this->maxWidth}" ; 
+
+			$videoID = 'fb-'.$this->wire('sanitizer')->name($matches[6][$key]); 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+
+			//if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+
+			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+		}
+
+	}
+
+	/**
+	 * Check for Instagram URLS and embed when found
+	 * 
+	 * @var string $str
+	 *
+	 */
+	protected function embedInstagram(&$str) {
+
+		/****
+		 * Instagram URLs
+		 * URL scheme: http://instagram.com/p/*
+			URL scheme: http://instagr.am/p/*
+			URL scheme: http://www.instagram.com/p/*
+			URL scheme: http://www.instagr.am/p/*
+			URL scheme: https://instagram.com/p/*
+			URL scheme: https://instagr.am/p/*
+			URL scheme: https://www.instagram.com/p/*
+			URL scheme: https://www.instagr.am/p/*
+		 */
+
+		if(strpos($str, 'instagram.com/') === false 
+		   && strpos($str, 'instagr.am/') === false) return;
+			
+		if(!preg_match_all('#<p>\s*((https?:\/\/)?([\w\.]*)instagr(?:.am|am.com)+/p/(.*)/).*?</p>#', $str, $matches)) return;
+
+		foreach($matches[0] as $key => $line) { 
+
+			$oembedURL = 
+				"$this->https://api.instagram.com/oembed?url=" . urlencode($matches[1][$key]) . 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
+
+			$videoID = 'ig-'.$matches[4][$key]; 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+
+			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+		}
+	}
+	
 	/**
 	 * Module configuration screen
 	 * 

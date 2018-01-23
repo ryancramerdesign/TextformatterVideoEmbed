@@ -1,18 +1,18 @@
-# Video embed for YouTube and Vimeo
+# Video or Social Post Embed
 
-ProcessWire Textformatter module that enables translation of YouTube or Vimeo URLs to full embed codes, resulting in a viewable video in textarea fields you apply it to.
+ProcessWire Textformatter module that enables translation of YouTube, Vimeo, Instagram, Facebook, Twitter or Issuu URLs to full embed codes, resulting in a viewable video or social post in textarea fields you apply it to.
 
 ## How to install
 
 - Copy the TextformatterVideoEmbed.module file to your /site/modules/ directory (or place it in /site/modules/TextformatterVideoEmbed/). 
 
-- Click *check for new modules* in ProcessWire Admin Modules screen. Click *install* for the module labeled: "Video embed for YouTube/Vimeo".
+- Click *check for new modules* in ProcessWire Admin Modules screen. Click *install* for the module labeled: "Video or Social Post Embed".
 
 - Now you will be on the module config screen. Please make note of the config options and set as you see fit.
 
 ## How to use
 
-- Edit your *body* field in Setup > Fields (or whatever field(s) you will be placing videos in). On the *details* tab, find the *Text Formatters* field and select "Video embed for YouTube/Vimeo". Save. 
+- Edit your *body* field in Setup > Fields (or whatever field(s) you will be placing videos in). On the *details* tab, find the *Text Formatters* field and select "Video or Social Post Embed". Save. 
 
 - Edit a page using the field you edited and paste in YouTube and/or Vimeo video URLs each on their own paragraph. 
 
@@ -29,6 +29,17 @@ How it might look in your editor (like TinyMCE):
 > And here is a great video I watched earlier this week:
 > 
 > http://vimeo.com/18280328
+> 
+> Embed social post and Issuu Presentation:
+> 
+> https://www.instagram.com/p/BeA8p9AhA3b/
+> 
+> https://twitter.com/rpc_radio/status/954315569838411776
+> 
+> https://www.facebook.com/TNTLA/videos/10155549598252758/
+> 
+> https://issuu.com/madsoundsmagazine/docs/mad_sounds_issue_no._17_issuu
+
 
 ## How it works
 
@@ -44,7 +55,7 @@ If you change these max width / max height settings you may also want to check t
 
 ### Using with Markdown, Textile or other LML
 
-This text formatter is looking for a YouTube or Vimeo video URL surrounded by paragraph tags. As a result, if you are using Markdown or Textile (or something else like it) you want that text formatter to run before this one. 
+This text formatter is looking for a YouTube, Vimeo, Instagram, Facebook, Twitter or Issuu video URL surrounded by paragraph tags. As a result, if you are using Markdown or Textile (or something else like it) you want that text formatter to run before this one. 
 That ensures that the expected paragraph tags will be present when TextformatterVideoEmbed runs.  You can control the order that text formatters are run in by drag/drop sorting in the field editor.
 
 ------
