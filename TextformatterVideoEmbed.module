@@ -404,7 +404,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		$sql =	"CREATE TABLE " . self::dbTableName . " (" . 
 			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " . 
-			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " . 
+			"embed_code text NOT NULL DEFAULT '', " . 
 			"created TIMESTAMP NOT NULL " . 
 			")";
 
