@@ -165,7 +165,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			&& strpos($str, '://youtu.be/') === false) return;
 
 		// 1: full URL | 2:video id | 3: query string (optional)
-		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
+		$regex = '#<p[^>]*>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
 		if(!preg_match_all($regex, $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
@@ -201,45 +201,22 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if(strpos($str, '://vimeo.com/') === false) return;
 
-		if(!preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) return;
+		if(!preg_match_all('#<p[^>]*>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
 
-			$oembedURL = 
+			$replaceLine = $line;
+			$oembedURL   = 
 				"$this->http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . 
 				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 
 			$videoID = $matches[2][$key]; 
 			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+
 			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+			else $replaceLine = $matches[1][$key]; //Only replace the URL and keep the attributes assigned to the <p> tag (eg, align, style) 
 
-			if($embedCode) $str = str_replace($line, $embedCode, $str); 
-		}
-	}
-
-	/**
-	 * Check for Issuu URLS and embed when found
-	 * 
-	 * @var string $str
-	 *
-	 */
-	protected function embedIssuu(&$str) {
-
-		if(strpos($str, '://issuu.com/') === false) return;
-
-		if(!preg_match_all('#<p>\s*(https?://issuu.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
-
-		foreach($matches[0] as $key => $line) { 
-
-			$oembedURL = 
-				"$this->https://issuu.com/oembed?url=" . urlencode($matches[1][$key]) . 
-				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}&format=json"; 
-
-			$videoID = $matches[3][$key]; 
-			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
-
-			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+			if($embedCode) $str = str_replace($replaceLine, $embedCode, $str); 
 		}
 	}
 
@@ -253,19 +230,22 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if(strpos($str, '://twitter.com/') === false) return;
 
-		if(!preg_match_all('#<p>\s*(https?://twitter.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
+		if(!preg_match_all('#<p[^>]*>\s*(https?://twitter.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
 
-			$oembedURL = 
+			$replaceLine = $line;
+			$oembedURL   = 
 				"$this->https://publish.twitter.com/oembed?url=" . urlencode($matches[1][$key]) . 
-				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}&lang=es"; 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 
 			$videoID = 'tw-'.$matches[3][$key]; 
 			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
 
-			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+			else $replaceLine = $matches[1][$key]; //Only replace the URL and keep the attributes assigned to the <p> tag (eg, align, style)
+
+			if($embedCode) $str = str_replace($replaceLine, $embedCode, $str); 
 		}
 	}
 
@@ -281,7 +261,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if(strpos($str, '://www.facebook.com/') === false) return;
 
-		if(!preg_match_all('#<p>\s*((https?:\/\/)?(www\.)?facebook.com\/(.*)/(videos|posts)?/(.*)).*?</p>#', $str, $matches)) return;
+		if(!preg_match_all('#<p[^>]*>\s*((https?:\/\/)?(www\.)?facebook.com\/(.*)/(videos|posts)?/(.*)).*?</p>#', $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
 		
@@ -324,19 +304,51 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		if(strpos($str, 'instagram.com/') === false 
 		   && strpos($str, 'instagr.am/') === false) return;
 			
-		if(!preg_match_all('#<p>\s*((https?:\/\/)?([\w\.]*)instagr(?:.am|am.com)+/p/(.*)/).*?</p>#', $str, $matches)) return;
+		if(!preg_match_all('#<p[^>]*>\s*((https?:\/\/)?([\w\.]*)instagr(?:.am|am.com)+/p/(.*)/).*?</p>#', $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
 
-			$oembedURL = 
+			$replaceLine = $line;
+			$oembedURL   = 
 				"$this->https://api.instagram.com/oembed?url=" . urlencode($matches[1][$key]) . 
 				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
 
 			$videoID = 'ig-'.$matches[4][$key]; 
 			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
 
-			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+			else $replaceLine = $matches[1][$key]; //Only replace the URL and keep the attributes assigned to the <p> tag (eg, align, style)  
+
+			if($embedCode) $str = str_replace($replaceLine, $embedCode, $str); 
+		}
+	}
+
+	/**
+	 * Check for Issuu URLS and embed when found
+	 * 
+	 * @var string $str
+	 *
+	 */
+	protected function embedIssuu(&$str) {
+
+		if(strpos($str, '://issuu.com/') === false) return;
+
+		if(!preg_match_all('#<p[^>]*>\s*(https?://issuu.com/(.*)/(.*)).*?</p>#', $str, $matches)) return;
+
+		foreach($matches[0] as $key => $line) { 
+
+			$replaceLine = $line;
+			$oembedURL   = 
+				"$this->https://issuu.com/oembed?url=" . urlencode($matches[1][$key]) . 
+				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}&format=json"; 
+
+			$videoID = $matches[3][$key]; 
+			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
+
+			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
+			else $replaceLine = $matches[1][$key]; //Only replace the URL and keep the attributes assigned to the <p> tag (eg, align, style)  
+
+			if($embedCode) $str = str_replace($replaceLine, $embedCode, $str); 
 		}
 	}
 	
