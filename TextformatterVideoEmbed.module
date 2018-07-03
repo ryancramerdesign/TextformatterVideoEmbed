@@ -159,8 +159,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			&& strpos($str, '://www.youtube.com/v/') === false 
 			&& strpos($str, '://youtu.be/') === false) return;
 
-		//               1: full URL                                                 2:video id    3: query string (optional)
-		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
+		// Does the given string contain ONLY a URL? Else, search for a URL contained in a <p>
+		$regexBase = '(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?';
+		$regex = (strpos($str, ' ') === false)
+			? '#'.$regexBase.'#'
+			: '#<p>\s*'.$regexBase.'.*?</p>#';
+
 		if(!preg_match_all($regex, $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
@@ -196,7 +200,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if(strpos($str, '://vimeo.com/') === false) return;
 
-		if(!preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) return;
+		// Does the given string contain ONLY a URL? Else, search for a URL contained in a <p>
+		$regexBase = '(https?://vimeo.com/(\d+))';
+		$regex = (strpos($str, ' ') === false)
+			? '#'.$regexBase.'#'
+			: '#<p>\s*'.$regexBase.'.*?</p>#';
+
+		if(!preg_match_all($regex, $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
 
