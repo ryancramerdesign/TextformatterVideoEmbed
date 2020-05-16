@@ -100,6 +100,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 			if(is_array($data) && isset($data['html'])) {
 				$embedCode = $data['html'];
+				$embedCode = str_replace('feature=oembed', 'feature=oembed&amp;rel=0', $embedCode);
 
 				$sql = 	
 					"INSERT INTO $table SET " . 
