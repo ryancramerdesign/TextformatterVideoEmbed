@@ -162,7 +162,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			&& strpos($str, '://youtu.be/') === false) return;
 
 		//               1: full URL                                                 2:video id    3: query string (optional)
-		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
+		$regex = '#<p[^>]*>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
 		if(!preg_match_all($regex, $str, $matches)) return;
 
 		foreach($matches[0] as $key => $line) { 
