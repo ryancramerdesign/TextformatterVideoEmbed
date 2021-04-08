@@ -1,18 +1,47 @@
-# Video embed for YouTube and Vimeo
+# Video embed for YouTube (and Vimeo)
 
 ProcessWire Textformatter module that enables translation of YouTube or Vimeo URLs 
 to full embed codes, resulting in a viewable video in textarea fields you apply it to.
+
+*If upgrading from a 1.x version, please see the “How to upgrade” instructions in this
+document as there have been significant changes to the module.* 
 
 ## How to install
 
 - Copy the module files into directory /site/modules/TextformatterVideoEmbed/
 
 - Click “Modules > Refresh” in ProcessWire Admin. Click *install* for the module labeled:
-  “Video embed for YouTube/Vimeo”.
+  “Video embed for YouTube (and Vimeo)”.
 
 - Now you will be on the module config screen. Please make note of the config options 
   and set as you see fit.
 
+
+## How to upgrade (1.x to 2.x)
+
+If upgrading from a 1.x version of this module to a 2.x version, please note that the module
+has largely been rewritten and uses a different database structure. I recommend the following
+steps to upgrade: 
+
+1. Uninstall the old version of this module.
+2. Replace its files (in /site/modules/TextformatterVideoEmbed/) with those from this version.
+3. Proceed with the “How to install” instructions. 
+
+Upgrade notes: 
+
+- It is not necessary to remove the TextformatterVideoEmbed selection from any
+  existing fields, as it will remain with those fields and continue to work after the module 
+  is re-installed. 
+
+- After you have upgraded, double check that existing videos are working and output how you 
+  want, as significant changes have been made in this version. 
+  
+- The max width/height settings have been dropped in this version and replaced with a 
+  "Max size" selection of predefined resolutions. 
+
+- A new "Aspect ratio" setting has been added. Most will want to either leave this at the 
+  default/auto setting or select the 16:9 setting.   
+  
 ## How to use
 
 - Edit your *body* field in “Setup > Fields” (or whatever fields you will be placing 
@@ -29,8 +58,8 @@ How it might look in your editor (like CKEditor):
 > Here are two videos about ProcessWire
 >
 > https://www.youtube.com/watch?v=Wl4XiYadV_k
-> 
-> https://www.youtube.com/watch?v=XKnG7sikE-U 
+>
+> https://youtu.be/XKnG7sikE-U
 > 
 > And here is a great video I watched earlier this week:
 > 
@@ -66,5 +95,5 @@ runs. You can control the order that text formatters are run in by drag/drop
 sorting in the field editor.
 
 ------
-Copyright 2020 by Ryan Cramer
+Copyright 2021 by Ryan Cramer
 

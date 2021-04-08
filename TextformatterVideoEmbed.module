@@ -5,13 +5,23 @@
  *
  * Looks for Youtube or Vimeo URLs and automatically converts them to embeds
  *
- * Copyright (C) 2020 by Ryan Cramer 
+ * Copyright (C) 2021 by Ryan Cramer 
  * Licensed under MPL 2.0
  * https://processwire.com
  *
  * @property int $maxWidth
  * @property int $maxHeight
+ * @property string $maxSize
  * @property int $responsive
+ * @property string $wrapStyles
+ * @property string $frameStyles
+ * @property int $refreshDays
+ * @property int $lastMaint Timestamp of last maintenance
+ * @property string $aspectRatio
+ * 
+ * @method array getAspectRatios()
+ * @method array getVideoSizes()
+ * @method string wrapEmbedCode($embedCode, array $data)
  *
  */
 
@@ -19,11 +29,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	public static function getModuleInfo() {
 		return array(
-			'title' => __('Video embed for YouTube/Vimeo', __FILE__), 
-			'version' => 111, 
-			'summary' => __('Enter a full YouTube or Vimeo URL by itself in any paragraph (example: http://www.youtube.com/watch?v=Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with TinyMCE textarea fields.', __FILE__),
+			'title' => 'Video embed for YouTube (and Vimeo)', 
+			'version' => 200, 
+			'summary' => 'Enter a full YouTube (or Vimeo) URL by itself in any paragraph (example: https://youtu.be/Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with CKEditor textarea fields.', 
 			'author' => 'Ryan Cramer',
-			'href' => 'https://modules.processwire.com/modules/textformatter-video-embed/'
+			'href' => 'https://processwire.com/modules/textformatter-video-embed/',
+			'requires' => 'ProcessWire>=3.0.148',
 		); 
 	}
 
@@ -35,11 +46,85 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * @var array
 	 * 
 	 */
-	protected static $configDefaults = array(
-		'maxWidth' => 640, 
-		'maxHeight' => 480,
-		'responsive' => 0,
-	); 
+	protected $configDefaults = array(
+		'maxSize' => '720p',
+		'wrapStyles' => 'position:relative;margin:1em 0;padding-bottom:{pct}%;height:0;overflow:hidden;',
+		'frameStyles' => 'position:absolute;top:0;left:0;width:100%;height:100%;', 
+		'refreshDays' => 0, 
+		'lastMaint' => 0,
+		'failAction' => 0, 
+		'aspectRatio' => '0',
+	);
+
+	/**
+	 * Verbose embed data defaults
+	 * 
+	 * @var array
+	 * 
+	 */
+	protected $verboseDataDefaults = array(
+		'valid' => false,
+		'title' => '',
+		'author_name' => '',
+		'author_url' => '',
+		'type' => '',
+		'height' => '',
+		'width' => '',
+		'version' => '',
+		'provider_name' => '',
+		'provider_url' => '',
+		'thumbnail_height' => '',
+		'thumbnail_width' => '',
+		'thumbnail_url' => '',
+		'embed_code' => '', 
+		'video_url' => '', 
+		'page_id' => 0,
+		'field' => '',
+	);
+
+	/**
+	 * Video sizes
+	 * 
+	 * @var array
+	 * 
+	 */
+	protected $videoSizes = array(
+		'240p' => array(
+			'width' => 426, 
+			'height' => 240, 
+			'label' => 'Minimum YouTube size'
+		),
+		'360p' => array(
+			'width' => 640,
+			'height' => 360,
+			'label' => 'Typical website resolution'
+		),
+		'480p' => array(
+			'width' => 854,
+			'height' => 480,
+			'label' => 'Standard definition (SD)'
+		),
+		'720p' => array(
+			'width' => 1280,
+			'height' => 720,
+			'label' => 'High definition (HD) min'
+		),
+		'1080p' => array(
+			'width' => 1920,
+			'height' => 1080,
+			'label' => 'High definition (HD) max'
+		),
+		'1440p' => array(
+			'width' => 2560,
+			'height' => 1440,
+			'label' => '2K resolution'
+		),
+		'2160p' => array(
+			'width' => 3840,
+			'height' => 2160,
+			'label' => '4K resolution'
+		),
+	);
 
 	/**
 	 * Data as used by the get/set functions
@@ -48,22 +133,63 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	protected $data = array();
 
 	/**
-	 * Either http or https, depending on $config->https
+	 * Last used HTTP GET URL
+	 * 
+	 * @var string
+	 * 
+	 */
+	protected $lastHttpGetVideoID = '';
+
+	/**
+	 * Last Page passed to format()
+	 * 
+	 * @var int
+	 * 
+	 */
+	protected $lastPageId = 0;
+
+	/**
+	 * Name of last Field passed to format()
+	 * 
+	 * @var string
 	 *
 	 */
-	protected $http = '';
+	protected $lastFieldName = '';
 
 	/**
 	 * Set our configuration defaults
 	 *
 	 */
 	public function __construct() {
-		foreach(self::$configDefaults as $key => $value) {
+		parent::__construct();
+		foreach($this->configDefaults as $key => $value) {
 			$this->set($key, $value); 
 		}
-		$this->http = $this->config->https ? 'https' : 'http';
-	}	
+	}
 
+	/**
+	 * Run daily maintenance
+	 * 
+	 * @return bool|int Return false if not yet time to run, int with quantity of deleted items when run
+	 * 
+	 */
+	protected function maintenance() {
+		
+		if($this->refreshDays < 1) return false;
+		if($this->lastMaint >= (time() - 86400)) return false;
+
+		$table = self::dbTableName;
+		$query = $this->wire()->database->prepare("DELETE FROM $table WHERE created<:maxAge");
+		$query->bindValue(':maxAge', date('Y-m-d H:i:s', strtotime("-$this->refreshDays DAYS")));
+		$query->execute();
+		$rowCount = $query->rowCount();
+		$this->lastMaint = time();
+		$this->wire()->modules->saveConfig($this, 'lastMaint', $this->lastMaint);
+		if($rowCount) $this->log("$rowCount videos older than $this->refreshDays days cleared for maintenance"); 
+		
+		return $rowCount;
+	}
+	
 	/**
 	 * Given a service oembed URL and video ID, return the corresponding embed code.
 	 *
@@ -72,65 +198,192 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * 
 	 * @param string $oembedURL
 	 * @param string $videoID
-	 * @return string
+	 * @param string $videoURL
+	 * @param bool $verbose Get verbose array of data rather than just embed code? 
+	 * @return string|int|array Returns embed code (string) or HTTP error code (int)
 	 *
 	 */
-	protected function getEmbedCode($oembedURL, $videoID) {
-
-		/** @var WireDatabasePDO $database */
-		$database = $this->wire('database');
+	protected function getEmbedCode($oembedURL, $videoID, $videoURL, $verbose = true) {
+		
+		$this->maintenance();
+		
+		$database = $this->wire()->database;
 		$table = self::dbTableName;
-		$query = $database->prepare("SELECT embed_code FROM $table WHERE video_id=:video_id"); 
-		$query->bindValue(":video_id", $videoID); 
+		$data = array();
+		
+		$query = $database->prepare("SELECT * FROM $table WHERE video_id=:video_id");
+		$query->bindValue(":video_id", $videoID);
 		$query->execute();
-
-		$embedCode = '';
-
+		
 		if($query->rowCount()) {
+			$row = $query->fetch(\PDO::FETCH_ASSOC); 
+			$data = empty($row['data']) ? array() : json_decode($row['data'], true);
+			$data = is_array($data) ? array_merge($this->verboseDataDefaults, $data) : $this->verboseDataDefaults;
+			$data['created'] = $row['created'];
+			$data['embed_code'] = ctype_digit($row['embed_code']) ? (int) $row['embed_code'] : $row['embed_code'];
+			$data['valid'] = is_string($data['embed_code']);
+		}
+		
+		$query->closeCursor();
 
-			list($embedCode) = $query->fetch(\PDO::FETCH_NUM); 
-			$query->closeCursor();
-
-		} else {
-
-			$query->closeCursor();
-			$http = new WireHttp();
-			$data = $http->get($oembedURL); 
-			if($data) $data = json_decode($data, true);
-
-			if(is_array($data) && isset($data['html'])) {
-				$embedCode = $data['html'];
-
-				$sql = 	
-					"INSERT INTO $table SET " . 
-					"video_id=:videoID, " . 
-					"embed_code=:embedCode, " . 
-					"created=NOW() ";
-
-				$query = $database->prepare($sql);
-				$query->bindValue(":videoID", $videoID);
-				$query->bindValue(":embedCode", $embedCode);
-				$query->execute();
-			}
+		if(empty($data)) {
+			$data = $this->getNewEmbedCode($oembedURL, $videoID, $videoURL, $verbose); 
 		}
 
-		// account for possibility that stored embed code contains http version while requested on https
-		if($this->http == 'https') $embedCode = str_replace('http://', 'https://', $embedCode); 
-
-		return $embedCode; 
+		return $data; 
 	}
 
 	/**
-	 * Make an iframe-based embed code responsive
+	 * Get new embed code now from HTTP
 	 * 
-	 * @param string $out
+	 * @param string $oembedURL
+	 * @param string $videoID
+	 * @param string $videoURL
+	 * @param bool $verbose
+	 * @return array|int|string
+	 * @throws WireException
+	 * 
+	 */
+	protected function getNewEmbedCode($oembedURL, $videoID, $videoURL, $verbose = true) {
+		
+		$database = $this->wire()->database;
+		$table = self::dbTableName;
+		$httpErrorCode = 0;
+		$maxTries = 3;
+		$retry = 0;
+		$oembedURL = $this->oembedURL($oembedURL, $videoURL, $videoID);
+		
+		$http = new WireHttp();
+		$this->wire($http);
+		$this->lastHttpGetVideoID = $videoID;
+		$data = $http->get($oembedURL);
+
+		if($data) $data = json_decode($data, true);
+
+		if(is_array($data) && isset($data['html'])) {
+			// success
+			$data = array_merge($this->verboseDataDefaults, $data);
+			$data['valid'] = true;
+			$data['video_url'] = $videoURL;
+			$data['page_id'] = $this->lastPageId;
+			$data['field'] = $this->lastFieldName;
+			$embedCode = $data['html'];
+			unset($data['html']);
+		} else {
+			// fail: store http code for error reporting and to avoid repeating request
+			$data = $this->verboseDataDefaults;
+			$httpErrorCode = (int) $http->getHttpCode();
+			$data['valid'] = false;
+			$embedCode = $httpErrorCode;
+		}
+		
+		do {
+			try {
+				$sql = "INSERT INTO $table SET video_id=:videoID, embed_code=:embedCode, created=NOW(), data=:data";
+				$query = $database->prepare($sql);
+				$query->bindValue(":videoID", $videoID);
+				$query->bindValue(":embedCode", "$embedCode");
+				$query->bindValue(":data", json_encode($data));
+				$query->execute();
+				$retry = 0;
+			} catch(\Exception $e) {
+				$retry++;
+				if($retry >= $maxTries) throw $e;
+				$this->___upgrade(0, 0);
+			}
+		} while($retry > 0 && $retry < $maxTries);
+
+		if($httpErrorCode) {
+			$this->log("HTTP $httpErrorCode fail for: $videoURL");
+		} else {
+			$this->log("Retrieved embed for: $videoURL");
+		}
+		
+		if($verbose) {
+			$data['embed_code'] = $embedCode;
+		}
+		
+		return $verbose ? $data : $embedCode;
+	}
+
+	/**
+	 * Apply replacements and additions to oembed URL
+	 * 
+	 * @param $oembedURL
+	 * @param $videoURL
+	 * @param $videoID
+	 * @return string
+	 * 
+	 */
+	protected function oembedURL($oembedURL, $videoURL, $videoID) {
+		$oembedURL = str_replace(
+			array('{url}', '{id}'),
+			array(urlencode($videoURL), urlencode($videoID)),
+			$oembedURL
+		);
+
+		if($this->maxSize && strpos($oembedURL, 'maxwidth=') === false) {
+			$videoSizes = $this->getVideoSizes();
+			$size = $videoSizes[$this->maxSize];
+			$oembedURL .= strpos($oembedURL, '?') ? '&' : '?';
+			$oembedURL .= "maxwidth=$size[width]&maxheight=$size[height]";
+		}
+
+		return $oembedURL;
+	}
+
+	/**
+	 * Wrap video embed code with responsive div
+	 * 
+	 * @param string $embedCode
+	 * @param array $data
 	 * @return string
 	 *
 	 */
-	protected function makeResponsive($out) {
-		$out = str_ireplace('<iframe ', "<iframe style='position:absolute;top:0;left:0;width:100%;height:100%;' ", $out);
-		$out = "<div class='TextformatterVideoEmbed' style='position:relative;padding:30px 0 56.25% 0;height:0;overflow:hidden;'>$out</div>";
+	protected function ___wrapEmbedCode($embedCode, array $data) {
+		
+		$sanitizer = $this->wire()->sanitizer;
+		$frameStyles = $sanitizer->entities($this->frameStyles);
+		$wrapStyles = $sanitizer->entities($this->wrapStyles);
+		$pct = $this->aspectRatio === '0' ? 0 : (float) $this->aspectRatio;
+		
+		if($pct === 0) {
+			// auto aspect ratio
+			if(!empty($data['height']) && !empty($data['width'])) {
+				$pct = 100 * ((int) $data['height']) / ((int) $data['width']);
+			} else {
+				$pct = '56.25'; // 16:9
+			}
+		}
+		
+		if($frameStyles) {
+			$frameStyles = str_replace(array('{pct}%', '{pct}', '{percent}%', '{percent}'), "$pct%", $frameStyles);
+			$embedCode = str_ireplace('<iframe ', "<iframe style='$frameStyles' ", $embedCode);
+		}
+		
+		if($wrapStyles) {
+			$wrapStyles = str_replace(array('{pct}%', '{pct}', '{percent}%', '{percent}'), "$pct%", $wrapStyles);
+			$out = "<div class='TextformatterVideoEmbed' style='$wrapStyles'>$embedCode</div>";
+		} else {
+			$out = "<div class='TextformatterVideoEmbed'>$embedCode</div>";
+		}
+		
 		return $out;
+	}
+	
+	/**
+	 * Format the given text string with Page and Field provided.
+	 *
+	 * @param Page $page
+	 * @param Field $field
+	 * @param string|mixed $value Value is provided as a reference, so is modified directly (not returned).
+	 *
+	 */
+	public function formatValue(Page $page, Field $field, &$value) {
+		// apply video embeds
+		$this->lastPageId = $page->id;
+		$this->lastFieldName = $field->name;
+		$this->format($value);
 	}
 
 	/**
@@ -144,8 +397,21 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function format(&$str) {
-		$this->embedYoutube($str);
-		$this->embedVimeo($str);
+		$youtube = strpos($str, 'youtu') !== false;
+		$vimeo = strpos($str, 'vimeo.com') !== false;
+		if(!$youtube && !$vimeo) return;
+		if((strpos($str, 'https://') === 0 || strpos($str, 'http://') === 0) 
+			&& strpos($str, '<') === false && strpos(trim($str), ' ') === false) {
+			$originalStr = $str;
+			$paraStr = "<p>" . trim($str) . "</p>";
+			$str = $paraStr;
+			if($youtube) $this->embedYoutube($str);
+			if($vimeo) $this->embedVimeo($str);
+			if($str === $paraStr) $str = $originalStr; // no change? restore
+		} else {
+			if($youtube) $this->embedYoutube($str);
+			if($vimeo) $this->embedVimeo($str);
+		}
 	}
 
 	/**
@@ -155,37 +421,64 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	protected function embedYoutube(&$str) {
-
-		// perform a strpos fast check before performing regex check
+		
+		// perform fast check before performing regex check
 		if(strpos($str, '://www.youtube.com/watch') === false 
 			&& strpos($str, '://www.youtube.com/v/') === false 
 			&& strpos($str, '://youtu.be/') === false) return;
 
-		//               1: full URL                                                 2:video id    3: query string (optional)
-		$regex = '#<p>\s*(https?://(?:www\.)?youtu(?:.be|be.com)+/(?:watch/?\?v=|v/)?([^\s&<\'"]+))(&[-_,.=&;a-zA-Z0-9]*)?.*?</p>#';
+		// 1: full URL, 2:video id, 3: query string (optional)
+		$regex = 
+			'#' . 
+			'<(?:p|h[1-6])' . // open tag <p or <h1, <h2, etc.
+			'(?:>|\s+[^>]+>)\s*' . // rest of open tag and close bracket
+			'(' . // capture #1: full URL 
+				'https?://(?:www\.)?youtu(?:\.be|be\.com)+/' . // scheme + host "https://youtu.be/"
+				'(?:watch/?\?v=|v/)?' . // optional "watch?v=" or "v/"
+				'([^\s&<\'"]+)' . // capture #2: video ID (U&LC letters, numbers)
+			')' . // end of capture #1: full URL
+			'((?:&|&amp;|\?)[-_,.=&;a-zA-Z0-9]*)?.*?' . // capture #3: optional query string
+			'</[ph123456]+>' . // close tag
+			'#';
+	
 		if(!preg_match_all($regex, $str, $matches)) return;
-
-		foreach($matches[0] as $key => $line) { 
-
-			$oembedURL = 
-				"$this->http://www.youtube.com/oembed?url=" . urlencode($matches[1][$key]) . 
-				"&format=json&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
-
-			$videoID = $matches[2][$key]; 
+		
+		$oembedUrl = "https://www.youtube.com/oembed?url={url}&format=json";
+		
+		foreach($matches[0] as $key => $line) {
+			
+			$youtubeUrl = $matches[1][$key];
+			$videoID = $matches[2][$key];
 			$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
-			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-
-			if($embedCode) {
+			$data = $this->getEmbedCode($oembedUrl, $videoID, $youtubeUrl); 
+			
+			if(is_int($data['embed_code'])) { 
+				// http error code
+				if($this->lastHttpGetVideoID === $videoID) {
+					// http error code just now, try again using generated URL
+					$youtubeUrl2 = "https://www.youtube.com/watch?v=$videoID";
+					if($youtubeUrl != $youtubeUrl2) {
+						$this->clearVideo($videoID);
+						$data = $this->getNewEmbedCode($oembedUrl, $videoID, $youtubeUrl2);
+					}
+				}
+			} 
+			
+			$embedCode = $data['embed_code'];
+			
+			if($data['valid']) {
 				if(strlen($queryString)) {
 					$queryString = str_replace('&amp;', '&', $queryString);
 					$queryString = trim($queryString, '&');
 					$embedCode = str_replace("?", "?$queryString&", $embedCode);
 				}
-				if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
-				$str = str_replace($line, $embedCode, $str); 
+				$embedCode = $this->wrapEmbedCode($embedCode, $data);
+			} else {
+				$embedCode = $this->embedError($line, $youtubeUrl, $data);
 			}
+			
+			$str = str_replace($line, $embedCode, $str); 
 		}
-
 	}
 
 	/**
@@ -198,20 +491,173 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if(strpos($str, '://vimeo.com/') === false) return;
 
-		if(!preg_match_all('#<p>\s*(https?://vimeo.com/(\d+)).*?</p>#', $str, $matches)) return;
+		if(!preg_match_all('#<(?:p|h[1-6])(?:>|\s+[^>]+>)\s*(https?://vimeo.com/(?:[^<]*?/|)(\d+)).*?</(?:p|h[1-6])>#', $str, $matches)) return;
 
-		foreach($matches[0] as $key => $line) { 
-
-			$oembedURL = 
-				"$this->http://vimeo.com/api/oembed.json?url=" . urlencode($matches[1][$key]) . 
-				"&maxwidth={$this->maxWidth}&maxheight={$this->maxHeight}"; 
-
-			$videoID = $matches[2][$key]; 
-			$embedCode = $this->getEmbedCode($oembedURL, $videoID); 
-			if($this->responsive) $embedCode = $this->makeResponsive($embedCode);
-
+		foreach($matches[0] as $key => $line) {
+			$videoID = $matches[2][$key];
+			$videoURL = "https://vimeo.com/$videoID";
+			$oembedURL = "https://vimeo.com/api/oembed.json?url={url}";
+			$data = $this->getEmbedCode($oembedURL, $videoID, $videoURL); 
+			if($data['valid']) {
+				$embedCode = $data['embed_code'];
+				$embedCode = $this->wrapEmbedCode($embedCode, $data);
+			} else {
+				$embedCode = $this->embedError($line, $videoURL, $data); 
+			}
 			if($embedCode) $str = str_replace($line, $embedCode, $str); 
 		}
+	}
+
+	/**
+	 * Render embed error
+	 * 
+	 * @param string $line
+	 * @param string $videoURL
+	 * @param array $data
+	 * @return string
+	 * 
+	 */
+	protected function embedError($line, $videoURL, $data) {
+		$openTag = substr($line, 0, strpos($line, '>')+1);
+		$closeTag = substr($line, strrpos($line, '</'));
+		return "$openTag{$videoURL} ($data[embed_code])$closeTag"; 
+	}
+
+	/**
+	 * Clear one video from cache
+	 * 
+	 * @param string $videoID
+	 * @return bool|int
+	 * @throws WireException
+	 * 
+	 */
+	public function clearVideo($videoID) {
+		$table = self::dbTableName;
+		$query = $this->wire()->database->prepare("DELETE FROM $table WHERE video_id=:video_id");
+		$query->bindValue(":video_id", $videoID);
+		$result = $query->execute();
+		return $result ? $query->rowCount() : false;
+	}
+	
+	/**
+	 * Clear all cached video embed codes, forcing it to re-pull 
+	 * 
+	 */
+	public function clearAllVideos() {
+		$this->wire()->database->query("DELETE FROM " . self::dbTableName);
+		$this->log("Cleared all video embeds"); 
+	}
+
+	/**
+	 * Get verbose data all videos
+	 * 
+	 * @return array
+	 * 
+	 */
+	public function getAllVideos() {
+		$videos = array();
+		$database = $this->wire()->database;
+		$query = $database->prepare('SELECT * FROM ' . self::dbTableName . ' ORDER BY created'); 
+		$query->execute();
+		while($row = $query->fetch(\PDO::FETCH_ASSOC)) {
+			$data = empty($row['data']) ? array() : json_decode($row['data'], true);
+			$row = array_merge($this->verboseDataDefaults, $row, $data);
+			$videos[] = $row;
+		}
+		$query->closeCursor();
+		return $videos;
+	}
+
+	/**
+	 * Get count of all videos currently in cache
+	 * 
+	 * @return int
+	 * 
+	 */
+	public function getNumVideos() {
+		$query = $this->wire()->database->prepare("SELECT COUNT(*) FROM " . self::dbTableName);
+		$query->execute();
+		$count = (int) $query->fetchColumn();
+		$query->closeCursor();
+		return $count;
+	}
+
+	/**
+	 * Get aspect ratios
+	 *
+	 * @return array
+	 *
+	 */
+	public function ___getAspectRatios() {
+		return array(
+			'0' => $this->_('Auto (use video aspect ratio)'),
+			'56.25' => $this->_('Fixed 16:9 (YouTube default)'),
+			'75.0' => $this->_('Fixed 4:3'),
+			'100.0' => $this->_('Fixed 1:1 (square)'),
+		);
+	}
+
+	/**
+	 * Get video sizes
+	 * 
+	 * @return array
+	 * 
+	 */
+	public function ___getVideoSizes() {
+		return array(
+			'240p' => array(
+				'width' => 426,
+				'height' => 240,
+				'label' => $this->_('Minimum YouTube size')
+			),
+			'360p' => array(
+				'width' => 640,
+				'height' => 360,
+				'label' => $this->_('Typical website resolution')
+			),
+			'480p' => array(
+				'width' => 854,
+				'height' => 480,
+				'label' => $this->_('Standard definition (SD)')
+			),
+			'720p' => array(
+				'width' => 1280,
+				'height' => 720,
+				'label' => $this->_('High definition (HD) min')
+			),
+			'1080p' => array(
+				'width' => 1920,
+				'height' => 1080,
+				'label' => $this->_('High definition (HD) max')
+			),
+			'1440p' => array(
+				'width' => 2560,
+				'height' => 1440,
+				'label' => $this->_('2K resolution')
+			),
+			'2160p' => array(
+				'width' => 3840,
+				'height' => 2160,
+				'label' => $this->_('4K resolution')
+			),
+		);
+	}
+
+	/**
+	 * Log a message for this class
+	 *
+	 * @param string $str Text to log, or omit to return the `$log` API variable.
+	 * @param array $options Optional extras to include:
+	 *  - `url` (string): URL to record the with the log entry (default=auto-detect)
+	 *  - `name` (string): Name of log to use (default=auto-detect)
+	 *  - `user` (User|string|null): User instance, user name, or null to log for current User. (default=null)
+	 * @return WireLog
+	 *
+	 */
+	public function ___log($str = '', array $options = array()) {
+		if(empty($options['name'])) $options['name'] = 'textformatter-video-embed';
+		if($str && $this->lastPageId) $str .= " [page:$this->lastPageId, field:$this->lastFieldName]";
+		return parent::___log($str, $options);
 	}
 
 	/**
@@ -223,58 +669,150 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 */
 	public function getModuleConfigInputfields(array $data) {
 	
-		/** @var Modules $modules */
-		$modules = $this->wire('modules');
-		/** @var WireDatabasePDO $database */
-		$database = $this->wire('database');
-		/** @var WireInput $input */
-		$input = $this->wire('input');
+		$modules = $this->wire()->modules;
+		$input = $this->wire()->input;
 
-		foreach(self::$configDefaults as $key => $value) {
+		foreach($this->configDefaults as $key => $value) {
 			if(!isset($data[$key])) $data[$key] = $value;
 		}
 
-		unset($data['cacheClear']);
+		unset($data['_clearCache']);
 		$inputfields = new InputfieldWrapper();
 
-		/** @var InputfieldInteger $f */
-		$f = $modules->get('InputfieldInteger'); 
-		$f->attr('name', 'maxWidth');
-		$f->attr('value', $data['maxWidth']); 
-		$f->label = __('Max Video Width'); 
-		$inputfields->add($f);
+		/** @var InputfieldFieldset $fs */
+		$fs = $modules->get('InputfieldFieldset');
+		$fs->attr('name', '_fs_sizes');
+		$fs->label = $this->_('Sizes');
+		$fs->description = $this->_('These settings affect the embed code that is used. As a result, if you change these settings you should clear your video cache afterwards (when videos already present).');
+		$fs->themeOffset = 1;
+		$inputfields->add($fs);
+
+		/** @var InputfieldSelect $f */
+		$f = $modules->get('InputfieldSelect');
+		$f->attr('name', 'maxSize');
+		$f->label = $this->_('Max video size to request');
+		$f->columnWidth = 50;
+		$f->addOption('', $this->_('None'));
+		foreach($this->getVideoSizes() as $name => $info) {
+			$f->addOption($name, "$name: $info[label] ($info[width]x$info[height])");
+		}
+		$f->val($data['maxSize']); 
+		$fs->add($f);
+
+		/** @var InputfieldSelect $f */
+		$f = $modules->get('InputfieldSelect'); 
+		$f->attr('name', 'aspectRatio');
+		$f->label = $this->_('Aspect ratio');
+		foreach($this->getAspectRatios() as $value => $label) {
+			$f->addOption($value, $label);
+		}
+		$f->val($data['aspectRatio']);
+		$f->columnWidth = 50;
+		$fs->add($f);
+	
+		/** @var InputfieldFieldset $fs */
+		$fs = $modules->get('InputfieldFieldset');
+		$fs->attr('name', '_fs_styles');
+		$fs->label = $this->_('Embed styles');
+		$fs->description = $this->_('The default styles enable a responsive video presentation and support of different aspect ratios.');
+		$fs->collapsed = Inputfield::collapsedYes;
+		$fs->themeOffset = 1;
+		$inputfields->add($fs);
+		
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'wrapStyles'); 
+		$f->label = $this->_('Wrap styles');
+		$f->description = $this->_('Inline styles applied to `div.TextformatterVideoEmbed` element that wraps the video embed `iframe`.'); 
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['wrapStyles'] . '`';
+		$f->val($data['wrapStyles']);
+		$fs->add($f);
+		
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'frameStyles');
+		$f->label = $this->_('Frame styles');
+		$f->description = $this->_('Inline styles applied to the `iframe` element containing the embedded video.');
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['frameStyles'] . '`';
+		$f->val($data['frameStyles']);
+		$fs->add($f);
+		
+		/** @var InputfieldFieldset $fs */
+		$fs = $modules->get('InputfieldFieldset');
+		$fs->attr('name', '_fs_cache');
+		$fs->label = $this->_('Cache');
+		$fs->themeOffset = 1;
+		$inputfields->add($fs);
 
 		/** @var InputfieldInteger $f */
-		$f = $modules->get('InputfieldInteger'); 
-		$f->attr('name', 'maxHeight');
-		$f->attr('value', $data['maxHeight']); 
-		$f->label = __('Max Video Height'); 
-		$inputfields->add($f);
+		$f = $modules->get('InputfieldInteger');
+		$f->attr('name', 'refreshDays');
+		$f->attr('value', isset($data['refreshDays']) ? (int) $data['refreshDays'] : 0);
+		$f->label = $this->_('Refresh time');
+		$f->description = $this->_('Refresh video embed codes after this many days, or 0 to cache forever.');
+		$fs->add($f);
 
-		/** @var InputfieldCheckbox $f */
-		$f = $modules->get('InputfieldCheckbox'); 
-		$f->attr('name', 'responsive');
-		$f->attr('value', 1); 
-		if($data['responsive']) $f->attr('checked', 'checked'); 
-		$f->label = __('Use Responsive Embed Method?'); 
-		$f->description = __('When checked, videos will be embedded in a manner that allows them to be presented in a width-flexible format.'); 
-		$inputfields->add($f); 
-
-		if($input->post('clearCache')) {
-			$database->query("DELETE FROM " . self::dbTableName); 
+		if($input->post('_clearCache')) {
+			$this->clearAllVideos();
 			$modules->message(__('Cleared video embed cache')); 
+			$numVideos = 0;
 		} else {
-			$query = $database->prepare("SELECT COUNT(*) FROM " . self::dbTableName); 
-			$query->execute();
-			list($n) = $query->fetch(\PDO::FETCH_NUM);
-			$query->closeCursor();
+			/** @var InputfieldCheckbox $f */
 			$f = $modules->get('InputfieldCheckbox');
-			$f->attr('name', 'clearCache'); 
-			$f->attr('value', 1); 
-			$f->label = __('Clear video cache?');
-			$f->description = __('This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled from YouTube/Vimeo as needed.');
-			$f->notes = sprintf(__('There are currently %d video(s) cached'), $n);
-			$inputfields->add($f); 
+			$f->attr('name', '_clearCache');
+			$f->attr('value', 1);
+			$f->label = __('Clear videos?');
+			$f->description = __('This will clear out cached embed codes. There is no harm in doing this, other than that it will force them to be re-pulled when next accessed.');
+			$numVideos = $this->getNumVideos();
+			$f->notes = sprintf(__('There are currently %d video(s) cached'), $numVideos);
+			if(!$numVideos) $f->collapsed = Inputfield::collapsedYes;
+			$fs->add($f);
+		}
+		
+		/** @var InputfieldMarkup $f */
+		$f = $modules->get('InputfieldMarkup');
+		$f->attr('name', '_video_list'); 
+		$f->label = $this->_('Videos in cache');
+		$fs->add($f);
+		
+		if($numVideos > 0 && $numVideos <= 100) {
+			/** @var MarkupAdminDataTable $table */
+			$table = $modules->get('MarkupAdminDataTable');
+			$table->setEncodeEntities(false);
+			$videos = $this->getAllVideos();
+			$sanitizer = $this->wire()->sanitizer;
+			foreach($videos as $video) {
+				if(empty($video['valid'])) continue;
+				foreach($video as $key => $value) {
+					$video[$key] = $sanitizer->entities($value);
+				}
+				$thumbUrl = $video['thumbnail_url'];
+				$thumb = $thumbUrl ? "<img width='200' src='$thumbUrl' alt='' />" : "&nbsp;";
+				$page = $this->wire()->pages->get((int) $video['page_id']); 
+				$table->headerRow(array(
+					'Thumb',
+					'Title',
+					'Author',
+					'Source',
+					'Size',
+					'Added',
+					'Page',
+					'Field',
+				));
+				$table->row(array(
+					"<a target='_blank' href='$video[video_url]'>$thumb</a>",
+					"<a target='_blank' href='$video[video_url]'>$video[title]</a>", 
+					"<a target='_blank' href='$video[author_url]'>$video[author_name]</a>", 
+					"$video[provider_name]", 
+					"$video[width]x$video[height]",
+					wireRelativeTimeStr($video['created'], true),
+					"<a href='$page->url'>" . $page->get('title|name') . "</a>", 
+					"$video[field]",
+				));
+			}
+			$f->value = $table->render();
+		} else {
+			$f->value = "<p>" . $this->_('There are currently no videos in the cache.') . "</p>";
 		}
 
 		return $inputfields; 		
@@ -292,10 +830,34 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			"CREATE TABLE " . self::dbTableName . " (" . 
 			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " . 
 			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " . 
-			"created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP" . 
+			"created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, " .
+			"`data` TEXT, " . 
+			"INDEX created (created) " . 
 			")";
 
 		$database->exec($sql);
+	}
+
+	/**
+	 * Upgrade
+	 * 
+	 * @param $fromVersion
+	 * @param $toVersion
+	 * 
+	 */
+	public function ___upgrade($fromVersion, $toVersion) {
+		if($fromVersion || $toVersion) {}
+		$database = $this->wire()->database;
+		$table = self::dbTableName;
+		$query = $database->prepare("SHOW COLUMNS FROM `$table` WHERE Field='data'");
+		$query->execute();
+		$numRows = (int) $query->rowCount();
+		if(!$numRows) {
+			$this->clearAllVideos();
+			$query = $database->prepare("ALTER TABLE `$table` ADD `data` TEXT"); 
+			$query->execute();
+			$this->log("Added 'data' column to table: $table"); 
+		}
 	}
 
 	/**
