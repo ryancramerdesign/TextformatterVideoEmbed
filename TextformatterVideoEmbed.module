@@ -18,10 +18,12 @@
  * @property int $refreshDays
  * @property int $lastMaint Timestamp of last maintenance
  * @property string $aspectRatio
+ * @property int $failAction
  * 
  * @method array getAspectRatios()
  * @method array getVideoSizes()
  * @method string wrapEmbedCode($embedCode, array $data)
+ * @method string embedError($line, $videoURL, $data)
  *
  */
 
@@ -30,7 +32,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Video embed for YouTube (and Vimeo)', 
-			'version' => 200, 
+			'version' => 201, 
 			'summary' => 'Enter a full YouTube (or Vimeo) URL by itself in any paragraph (example: https://youtu.be/Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with CKEditor textarea fields.', 
 			'author' => 'Ryan Cramer',
 			'href' => 'https://processwire.com/modules/textformatter-video-embed/',
@@ -39,6 +41,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	}
 
 	const dbTableName = 'textformatter_video_embed';
+	const logName = 'textformatter-video-embed';
 
 	/**
 	 * Default configuration values
@@ -517,10 +520,15 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * @return string
 	 * 
 	 */
-	protected function embedError($line, $videoURL, $data) {
+	protected function ___embedError($line, $videoURL, $data) {
 		$openTag = substr($line, 0, strpos($line, '>')+1);
 		$closeTag = substr($line, strrpos($line, '</'));
-		return "$openTag{$videoURL} ($data[embed_code])$closeTag"; 
+		if($this->failAction > 0) {
+			$out = "<!--{$videoURL} ($data[embed_code])-->"; 
+		} else {
+			$out = "$openTag<span class='TextformatterVideoEmbedError'>$videoURL ($data[embed_code])</span>$closeTag"; 
+		}
+		return $out;
 	}
 
 	/**
@@ -549,24 +557,73 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	}
 
 	/**
-	 * Get verbose data all videos
+	 * Get verbose data of videos (up to 100 or $options specified limit)
 	 * 
+	 * @param array $options
+	 *  - `limit` (int): Max items to return (default=100)
+	 *  - `start` (int): Item to start with, -1 for auto according to current pageNum, 0 for first. (default=-1)
+	 *  - `sort` (string): How to sort items, one of 'created' (ascending), or `-created` (descending). (default=-created)
 	 * @return array
 	 * 
 	 */
-	public function getAllVideos() {
-		$videos = array();
+	public function getVideos(array $options = array()) {
+		
+		$defaults = array(
+			'start' => -1, 
+			'limit' => 100, 
+			'sort' => '-created',
+		);
+		
+		$sorts = array(
+			'created' => 'created',
+			'-created' => 'created DESC',
+		);
+
 		$database = $this->wire()->database;
-		$query = $database->prepare('SELECT * FROM ' . self::dbTableName . ' ORDER BY created'); 
+		$table = self::dbTableName;
+		$videos = array();
+		$options = array_merge($defaults, $options);
+		$sort = $options['sort'];
+		if(!isset($sorts[$sort])) $sort = $defaults['sort'];
+		$orderBy = $sorts[$sort];
+		$start = (int) $options['start'];
+		$limit = (int) $options['limit'];
+		
+		if($limit > 0 && $start < 0) {
+			$start = ($this->wire()->input->pageNum() - 1) * $limit;
+		}
+		
+		$sql = 
+			"SELECT * FROM $table " . 
+			"ORDER BY $orderBy " . 
+			($limit ? "LIMIT $start,$limit" : "");
+		
+		$query = $database->prepare($sql);
 		$query->execute();
+		
 		while($row = $query->fetch(\PDO::FETCH_ASSOC)) {
 			$data = empty($row['data']) ? array() : json_decode($row['data'], true);
 			$row = array_merge($this->verboseDataDefaults, $row, $data);
 			$videos[] = $row;
 		}
+		
 		$query->closeCursor();
+		
 		return $videos;
 	}
+
+	/**
+	 * Get verbose data of all videos
+	 * 
+	 * @param array $options
+	 * @return array
+	 * 
+	 */
+	public function getAllVideos(array $options = array()) {
+		if(empty($options['limit'])) $options['limit'] = 0;
+		if(empty($options['start'])) $options['start'] = 0;
+		return $this->getVideos($options);
+	}	
 
 	/**
 	 * Get count of all videos currently in cache
@@ -655,7 +712,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function ___log($str = '', array $options = array()) {
-		if(empty($options['name'])) $options['name'] = 'textformatter-video-embed';
+		if(empty($options['name'])) $options['name'] = self::logName;
 		if($str && $this->lastPageId) $str .= " [page:$this->lastPageId, field:$this->lastFieldName]";
 		return parent::___log($str, $options);
 	}
@@ -709,6 +766,19 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->val($data['aspectRatio']);
 		$f->columnWidth = 50;
 		$fs->add($f);
+	
+		/** @var InputfieldRadios $f */
+		$f = $modules->get('InputfieldRadios');
+		$f->attr('name', 'failAction'); 
+		$f->label = $this->_('Fail action');
+		$f->description = $this->_('What to do with a video URL that the service returns an error for.'); 
+		$f->notes = $this->_('Note that errors and other activity is logged in Setup > Logs > textformatter-video-embed.'); 
+		$f->addOption(0, sprintf($this->_('Leave the URL, span-wrap it and append error code i.e. `%s`'), "<span class='TextformatterVideoEmbedError'>https://youtu.be/abc123 (404)</span>")); 
+		$f->addOption(1, sprintf($this->_('Add HTML comment around the video URL to hide it, i.e. `%s`'), "<!--https://youtu.be/abc123 (404)-->")); 
+		if(!$this->failAction) $f->collapsed = Inputfield::collapsedYes;
+		$f->val((int) $this->failAction);
+		$f->themeOffset = 1;
+		$inputfields->add($f);
 	
 		/** @var InputfieldFieldset $fs */
 		$fs = $modules->get('InputfieldFieldset');
@@ -772,14 +842,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		/** @var InputfieldMarkup $f */
 		$f = $modules->get('InputfieldMarkup');
 		$f->attr('name', '_video_list'); 
-		$f->label = $this->_('Videos in cache');
+		$f->label = $this->_('Recently embedded videos in cache (up to 100)');
 		$fs->add($f);
 		
-		if($numVideos > 0 && $numVideos <= 100) {
+		if($numVideos > 0) {
 			/** @var MarkupAdminDataTable $table */
 			$table = $modules->get('MarkupAdminDataTable');
 			$table->setEncodeEntities(false);
-			$videos = $this->getAllVideos();
+			$videos = $this->getVideos();
 			$sanitizer = $this->wire()->sanitizer;
 			foreach($videos as $video) {
 				if(empty($video['valid'])) continue;
@@ -836,6 +906,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			")";
 
 		$database->exec($sql);
+		
+		$this->log('Module installed');
 	}
 
 	/**
@@ -868,6 +940,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		/** @var WireDatabasePDO $database */
 		$database = $this->wire('database');
 		try { $database->exec("DROP TABLE " . self::dbTableName); } catch(\Exception $e) { }
+		$log = $this->wire()->log;
+		$logFile = $log->getFilename(self::logName);
+		if(is_file($logFile)) $log->delete(self::logName);
 	}
 
 
@@ -905,6 +980,4 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public function __get($key) {
 		return $this->get($key);
 	}
-
-
 }
