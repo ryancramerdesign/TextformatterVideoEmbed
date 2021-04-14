@@ -354,6 +354,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			// auto aspect ratio
 			if(!empty($data['height']) && !empty($data['width'])) {
 				$pct = 100 * ((int) $data['height']) / ((int) $data['width']);
+				$pct = str_replace(',', '.', $pct);
 			} else {
 				$pct = '56.25'; // 16:9
 			}
