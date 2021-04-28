@@ -32,7 +32,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public static function getModuleInfo() {
 		return array(
 			'title' => 'Video embed for YouTube (and Vimeo)', 
-			'version' => 201, 
+			'version' => 202, 
 			'summary' => 'Enter a full YouTube (or Vimeo) URL by itself in any paragraph (example: https://youtu.be/Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with CKEditor textarea fields.', 
 			'author' => 'Ryan Cramer',
 			'href' => 'https://processwire.com/modules/textformatter-video-embed/',
@@ -271,6 +271,20 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$data['page_id'] = $this->lastPageId;
 			$data['field'] = $this->lastFieldName;
 			$embedCode = $data['html'];
+			if($this->nocookies) {
+				// youtube
+				$embedCode = str_replace(
+					"youtube.com/",
+					"youtube-nocookie.com/", // set nocookie domain
+					$embedCode
+				);
+				// vimeo
+				$embedCode = str_replace(
+					"?app_id=",
+					"?dnt=1&app_id=", // add do-not-track parameter
+					$embedCode
+				);
+			}
 			unset($data['html']);
 		} else {
 			// fail: store http code for error reporting and to avoid repeating request
@@ -450,7 +464,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$oembedUrl = "https://www.youtube.com/oembed?url={url}&format=json";
 		
 		foreach($matches[0] as $key => $line) {
-			
 			$youtubeUrl = $matches[1][$key];
 			$videoID = $matches[2][$key];
 			$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
@@ -767,6 +780,15 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->val($data['aspectRatio']);
 		$f->columnWidth = 50;
 		$fs->add($f);
+	
+		/** @var InputfieldCheckbox $f */
+		$f = $modules->get('InputfieldCheckbox');
+		$f->attr('name', 'nocookies'); 
+		$f->label = $this->_('GDPR: Use the no-cookie / do-not-track version of video URLs');
+		$f->attr('checked', $this->nocookies ? 'checked' : '');
+		$f->themeOffset = 1;
+		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
+		$inputfields->add($f);
 	
 		/** @var InputfieldRadios $f */
 		$f = $modules->get('InputfieldRadios');
