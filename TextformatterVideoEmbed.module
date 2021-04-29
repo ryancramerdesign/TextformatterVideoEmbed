@@ -19,6 +19,7 @@
  * @property int $lastMaint Timestamp of last maintenance
  * @property string $aspectRatio
  * @property int $failAction
+ * @property int|bool $noCookies
  * 
  * @method array getAspectRatios()
  * @method array getVideoSizes()
@@ -57,6 +58,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'lastMaint' => 0,
 		'failAction' => 0, 
 		'aspectRatio' => '0',
+		'noCookies' => 0, 
 	);
 
 	/**
@@ -271,7 +273,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$data['page_id'] = $this->lastPageId;
 			$data['field'] = $this->lastFieldName;
 			$embedCode = $data['html'];
-			if($this->nocookies) {
+			if($this->noCookies) {
 				// youtube
 				$embedCode = str_replace(
 					"youtube.com/",
@@ -783,9 +785,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	
 		/** @var InputfieldCheckbox $f */
 		$f = $modules->get('InputfieldCheckbox');
-		$f->attr('name', 'nocookies'); 
+		$f->attr('name', 'noCookies'); 
 		$f->label = $this->_('GDPR: Use the no-cookie / do-not-track version of video URLs');
-		$f->attr('checked', $this->nocookies ? 'checked' : '');
+		$f->attr('checked', $this->noCookies ? 'checked' : '');
 		$f->themeOffset = 1;
 		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
 		$inputfields->add($f);
@@ -979,6 +981,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 *
 	 */
 	public function set($key, $value) {
+		if($key === 'nocookies') $key = 'noCookies';
 		$this->data[$key] = $value; 
 		return $this;
 	}
