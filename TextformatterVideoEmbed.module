@@ -21,6 +21,9 @@
  * @property int $failAction
  * @property int|bool $noCookies
  * @property int|bool $getConsent
+ * @property string $consentInfo
+ * @property string $consentButtonLabel
+ * @property string $consentPrivacyUrl
  *
  * @method array getAspectRatios()
  * @method array getVideoSizes()
@@ -60,7 +63,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'failAction' => 0,
 		'aspectRatio' => '0',
 		'noCookies' => 0,
-		'getConsent' => 0
+		'getConsent' => 0,
+		'consentInfo' => '(i) Click on this will load data from an external video service:',
+		'consentButtonLabel' => 'Fine, lets load this video!',
+		'consentPrivacyUrl' => ''
 	);
 
 	/**
@@ -393,17 +399,17 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		if($this->getConsent){
 			$tmpCode = base64_encode($out);
 			$tmpId   = substr(md5($data['video_url']),0,8);
-			$privacyPolicyUrl = '/privacy-policy/';
-			$consentInfo = '(!) On click this will load data from an external video service:<br>
-			<small>' . $data['video_url'] . '</small><br>
-			See <a target="_blank" href="' .$privacyPolicyUrl . '">privacy policy</a>';
-			$consentInfoButtonLabel = 'Fine, lets load the video!';
+			$consentInfo = $this->consentInfo . '<br>
+			<small>' . $data['video_url'] . '</small>';
+			if ( $this->consentPrivacyUrl ) {
+				$consentInfo .= '<br>See <a target="_blank" href="' . $this->consentPrivacyUrl . '">privacy policy</a>';
+			}
 			$tmp = '
 			<div class="video-consent-wrap" id="wrap-'. $tmpId .'" data-code="' . $tmpCode . '" style="' . $wrapStyles . '">
 				<div class="video-consent-info" style="' . $frameStyles . '">
 					<div>
 						<p>' . $consentInfo . '</p>
-						<button class="video-consent-button" id="btn-' . $tmpId . '">' . $consentInfoButtonLabel . '</button>
+						<button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button>
 					</div>
 				</div>
 			</div>
@@ -834,6 +840,36 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->themeOffset = 1;
 		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
 		$f->columnWidth = 50;
+		$inputfields->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'consentInfo');
+		$f->label = $this->_('Consent info');
+		$f->description = $this->_('Info to be shown with the consent button.');
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentInfo'] . '`';
+		$f->val($data['consentInfo']);
+		$f->columnWidth = 30;
+		$inputfields->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'consentButtonLabel');
+		$f->label = $this->_('Consent button label');
+		$f->description = $this->_('Text of the consent button');
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentButtonLabel'] . '`';
+		$f->val($data['consentButtonLabel']);
+		$f->columnWidth = 30;
+		$inputfields->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'consentPrivacyUrl');
+		$f->label = $this->_('Privacy info url');
+		$f->description = $this->_('Link to the privacy info');
+		$f->notes = 'If set, a link to the privacy info is added to the info';
+		$f->val($data['consentPrivacyUrl']);
+		$f->columnWidth = 40;
 		$inputfields->add($f);
 
 		/** @var InputfieldRadios $f */
