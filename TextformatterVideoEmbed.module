@@ -830,25 +830,28 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->columnWidth = 50;
 		$fs->add($f);
 
+		$fs = $modules->get('InputfieldFieldset');
+		$fs->attr('name', '_fs_gdpr');
+		$fs->label = $this->_('GDPR Options');
+		$fs->description = $this->_('These settings affect the embed code that is used. As a result, if you change these settings you should clear your video cache afterwards (when videos already present).');
+		$fs->themeOffset = 1;
+		$inputfields->add($fs);
+
 		/** @var InputfieldCheckbox $f */
 		$f = $modules->get('InputfieldCheckbox');
 		$f->attr('name', 'noCookies');
 		$f->label = $this->_('GDPR: Use the no-cookie / do-not-track version of video URLs');
 		$f->attr('checked', $this->noCookies ? 'checked' : '');
-		$f->themeOffset = 1;
-		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldCheckbox $f */
 		$f = $modules->get('InputfieldCheckbox');
 		$f->attr('name', 'getConsent');
 		$f->label = $this->_('GDPR: display a consent button before displaying the embedded video.');
 		$f->attr('checked', $this->getConsent ? 'checked' : '');
-		$f->themeOffset = 1;
-		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get('InputfieldText');
@@ -858,7 +861,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentInfo'] . '`';
 		$f->val($data['consentInfo']);
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get('InputfieldText');
@@ -868,7 +871,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentButtonLabel'] . '`';
 		$f->val($data['consentButtonLabel']);
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldPageListSelect $field */
 		$f = $modules->get('InputfieldPageListSelect');
@@ -876,11 +879,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->label = $this->_('Privacy info page');
 		$f->attr('value', (int) $this->consentPrivacyPage);
 		$f->description = $this->_('Select the page with the privacy policy info');
-		$f->required = false;
-		$f->icon = 'folder-open-o';
+		$f->notes = 'If set, a link to the privacy info is added to the info.';
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldText $f */
 		$f = $modules->get('InputfieldText');
@@ -891,7 +893,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->val($data['consentPrivacyUrl']);
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
-		$inputfields->add($f);
+		$fs->add($f);
 
 		/** @var InputfieldRadios $f */
 		$f = $modules->get('InputfieldRadios');
