@@ -24,6 +24,7 @@
  * @property string $consentInfo
  * @property string $consentButtonLabel
  * @property string $consentPrivacyUrl
+ * @property int $consentPrivacyPage
  *
  * @method array getAspectRatios()
  * @method array getVideoSizes()
@@ -66,7 +67,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'getConsent' => 0,
 		'consentInfo' => '(i) Click on this will load data from an external video service:',
 		'consentButtonLabel' => 'Fine, lets load this video!',
-		'consentPrivacyUrl' => ''
+		'consentPrivacyUrl' => '',
+		'consentPrivacyPage' => []
 	);
 
 	/**
@@ -401,8 +403,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$tmpId   = substr(md5($data['video_url']),0,8);
 			$consentInfo = $this->consentInfo . '<br>
 			<small>' . $data['video_url'] . '</small>';
+			if ( $this->consentPrivacyPage ) {
+				$privacyUrl = wire('pages')->get($this->consentPrivacyPage)->url;
+			}
 			if ( $this->consentPrivacyUrl ) {
-				$consentInfo .= '<br>See <a target="_blank" href="' . $this->consentPrivacyUrl . '">privacy policy</a>';
+				$privacyUrl = $this->consentPrivacyUrl;
+			}
+			if ( !empty($privacyUrl) ) {
+				$consentInfo .= '<br>See <a target="_blank" href="' . $privacyUrl . '">privacy policy</a>';
 			}
 			$tmp = '
 			<div class="video-consent-wrap" id="wrap-'. $tmpId .'" data-code="' . $tmpCode . '" style="' . $wrapStyles . '">
@@ -849,7 +857,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->description = $this->_('Info to be shown with the consent button.');
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentInfo'] . '`';
 		$f->val($data['consentInfo']);
-		$f->columnWidth = 30;
+		$f->columnWidth = 50;
 		$inputfields->add($f);
 
 		/** @var InputfieldText $f */
@@ -859,7 +867,19 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->description = $this->_('Text of the consent button');
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentButtonLabel'] . '`';
 		$f->val($data['consentButtonLabel']);
-		$f->columnWidth = 30;
+		$f->columnWidth = 50;
+		$inputfields->add($f);
+
+		/** @var InputfieldPageListSelect $field */
+		$f = $modules->get('InputfieldPageListSelect');
+		$f->setAttribute('name', 'consentPrivacyPage');
+		$f->label = $this->_('Privacy info page');
+		$f->attr('value', (int) $this->consentPrivacyPage);
+		$f->description = $this->_('Select the page with the privacy policy info');
+		$f->required = false;
+		$f->icon = 'folder-open-o';
+		$f->collapsed = Inputfield::collapsedBlank;
+		$f->columnWidth = 50;
 		$inputfields->add($f);
 
 		/** @var InputfieldText $f */
@@ -867,9 +887,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->attr('name', 'consentPrivacyUrl');
 		$f->label = $this->_('Privacy info url');
 		$f->description = $this->_('Link to the privacy info');
-		$f->notes = 'If set, a link to the privacy info is added to the info';
+		$f->notes = 'If set, a link to the privacy info is added to the info. Overrides the privacy info page url if set.';
 		$f->val($data['consentPrivacyUrl']);
-		$f->columnWidth = 40;
+		$f->collapsed = Inputfield::collapsedBlank;
+		$f->columnWidth = 50;
 		$inputfields->add($f);
 
 		/** @var InputfieldRadios $f */
