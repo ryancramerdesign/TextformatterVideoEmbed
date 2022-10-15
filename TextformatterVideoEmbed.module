@@ -5,7 +5,7 @@
  *
  * Looks for Youtube or Vimeo URLs and automatically converts them to embeds
  *
- * Copyright (C) 2021 by Ryan Cramer 
+ * Copyright (C) 2021 by Ryan Cramer
  * Licensed under MPL 2.0
  * https://processwire.com
  *
@@ -20,7 +20,8 @@
  * @property string $aspectRatio
  * @property int $failAction
  * @property int|bool $noCookies
- * 
+ * @property int|bool $getConsent
+ *
  * @method array getAspectRatios()
  * @method array getVideoSizes()
  * @method string wrapEmbedCode($embedCode, array $data)
@@ -32,13 +33,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	public static function getModuleInfo() {
 		return array(
-			'title' => 'Video embed for YouTube (and Vimeo)', 
-			'version' => 202, 
-			'summary' => 'Enter a full YouTube (or Vimeo) URL by itself in any paragraph (example: https://youtu.be/Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with CKEditor textarea fields.', 
+			'title' => 'Video embed for YouTube (and Vimeo)',
+			'version' => 202,
+			'summary' => 'Enter a full YouTube (or Vimeo) URL by itself in any paragraph (example: https://youtu.be/Wl4XiYadV_k) and this will automatically convert it to an embedded video. This formatter is intended to be run on trusted input. Recommended for use with CKEditor textarea fields.',
 			'author' => 'Ryan Cramer',
 			'href' => 'https://processwire.com/modules/textformatter-video-embed/',
 			'requires' => 'ProcessWire>=3.0.148',
-		); 
+		);
 	}
 
 	const dbTableName = 'textformatter_video_embed';
@@ -46,26 +47,27 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Default configuration values
-	 * 
+	 *
 	 * @var array
-	 * 
+	 *
 	 */
 	protected $configDefaults = array(
 		'maxSize' => '720p',
 		'wrapStyles' => 'position:relative;margin:1em 0;padding-bottom:{pct}%;height:0;overflow:hidden;',
-		'frameStyles' => 'position:absolute;top:0;left:0;width:100%;height:100%;', 
-		'refreshDays' => 0, 
+		'frameStyles' => 'position:absolute;top:0;left:0;width:100%;height:100%;',
+		'refreshDays' => 0,
 		'lastMaint' => 0,
-		'failAction' => 0, 
+		'failAction' => 0,
 		'aspectRatio' => '0',
-		'noCookies' => 0, 
+		'noCookies' => 0,
+		'getConsent' => 0
 	);
 
 	/**
 	 * Verbose embed data defaults
-	 * 
+	 *
 	 * @var array
-	 * 
+	 *
 	 */
 	protected $verboseDataDefaults = array(
 		'valid' => false,
@@ -81,22 +83,22 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'thumbnail_height' => '',
 		'thumbnail_width' => '',
 		'thumbnail_url' => '',
-		'embed_code' => '', 
-		'video_url' => '', 
+		'embed_code' => '',
+		'video_url' => '',
 		'page_id' => 0,
 		'field' => '',
 	);
 
 	/**
 	 * Video sizes
-	 * 
+	 *
 	 * @var array
-	 * 
+	 *
 	 */
 	protected $videoSizes = array(
 		'240p' => array(
-			'width' => 426, 
-			'height' => 240, 
+			'width' => 426,
+			'height' => 240,
 			'label' => 'Minimum YouTube size'
 		),
 		'360p' => array(
@@ -139,23 +141,23 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Last used HTTP GET URL
-	 * 
+	 *
 	 * @var string
-	 * 
+	 *
 	 */
 	protected $lastHttpGetVideoID = '';
 
 	/**
 	 * Last Page passed to format()
-	 * 
+	 *
 	 * @var int
-	 * 
+	 *
 	 */
 	protected $lastPageId = 0;
 
 	/**
 	 * Name of last Field passed to format()
-	 * 
+	 *
 	 * @var string
 	 *
 	 */
@@ -168,18 +170,18 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	public function __construct() {
 		parent::__construct();
 		foreach($this->configDefaults as $key => $value) {
-			$this->set($key, $value); 
+			$this->set($key, $value);
 		}
 	}
 
 	/**
 	 * Run daily maintenance
-	 * 
+	 *
 	 * @return bool|int Return false if not yet time to run, int with quantity of deleted items when run
-	 * 
+	 *
 	 */
 	protected function maintenance() {
-		
+
 		if($this->refreshDays < 1) return false;
 		if($this->lastMaint >= (time() - 86400)) return false;
 
@@ -190,74 +192,74 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$rowCount = $query->rowCount();
 		$this->lastMaint = time();
 		$this->wire()->modules->saveConfig($this, 'lastMaint', $this->lastMaint);
-		if($rowCount) $this->log("$rowCount videos older than $this->refreshDays days cleared for maintenance"); 
-		
+		if($rowCount) $this->log("$rowCount videos older than $this->refreshDays days cleared for maintenance");
+
 		return $rowCount;
 	}
-	
+
 	/**
 	 * Given a service oembed URL and video ID, return the corresponding embed code.
 	 *
-	 * A cached version of the embed code will be used if possible. When not possible, 
-	 * it will be retrieved from the service's oembed URL, and then cached. 
-	 * 
+	 * A cached version of the embed code will be used if possible. When not possible,
+	 * it will be retrieved from the service's oembed URL, and then cached.
+	 *
 	 * @param string $oembedURL
 	 * @param string $videoID
 	 * @param string $videoURL
-	 * @param bool $verbose Get verbose array of data rather than just embed code? 
+	 * @param bool $verbose Get verbose array of data rather than just embed code?
 	 * @return string|int|array Returns embed code (string) or HTTP error code (int)
 	 *
 	 */
 	protected function getEmbedCode($oembedURL, $videoID, $videoURL, $verbose = true) {
-		
+
 		$this->maintenance();
-		
+
 		$database = $this->wire()->database;
 		$table = self::dbTableName;
 		$data = array();
-		
+
 		$query = $database->prepare("SELECT * FROM $table WHERE video_id=:video_id");
 		$query->bindValue(":video_id", $videoID);
 		$query->execute();
-		
+
 		if($query->rowCount()) {
-			$row = $query->fetch(\PDO::FETCH_ASSOC); 
+			$row = $query->fetch(\PDO::FETCH_ASSOC);
 			$data = empty($row['data']) ? array() : json_decode($row['data'], true);
 			$data = is_array($data) ? array_merge($this->verboseDataDefaults, $data) : $this->verboseDataDefaults;
 			$data['created'] = $row['created'];
 			$data['embed_code'] = ctype_digit($row['embed_code']) ? (int) $row['embed_code'] : $row['embed_code'];
 			$data['valid'] = is_string($data['embed_code']);
 		}
-		
+
 		$query->closeCursor();
 
 		if(empty($data)) {
-			$data = $this->getNewEmbedCode($oembedURL, $videoID, $videoURL, $verbose); 
+			$data = $this->getNewEmbedCode($oembedURL, $videoID, $videoURL, $verbose);
 		}
 
-		return $data; 
+		return $data;
 	}
 
 	/**
 	 * Get new embed code now from HTTP
-	 * 
+	 *
 	 * @param string $oembedURL
 	 * @param string $videoID
 	 * @param string $videoURL
 	 * @param bool $verbose
 	 * @return array|int|string
 	 * @throws WireException
-	 * 
+	 *
 	 */
 	protected function getNewEmbedCode($oembedURL, $videoID, $videoURL, $verbose = true) {
-		
+
 		$database = $this->wire()->database;
 		$table = self::dbTableName;
 		$httpErrorCode = 0;
 		$maxTries = 3;
 		$retry = 0;
 		$oembedURL = $this->oembedURL($oembedURL, $videoURL, $videoID);
-		
+
 		$http = new WireHttp();
 		$this->wire($http);
 		$this->lastHttpGetVideoID = $videoID;
@@ -295,7 +297,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$data['valid'] = false;
 			$embedCode = $httpErrorCode;
 		}
-		
+
 		do {
 			try {
 				$sql = "INSERT INTO $table SET video_id=:videoID, embed_code=:embedCode, created=NOW(), data=:data";
@@ -317,22 +319,22 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		} else {
 			$this->log("Retrieved embed for: $videoURL");
 		}
-		
+
 		if($verbose) {
 			$data['embed_code'] = $embedCode;
 		}
-		
+
 		return $verbose ? $data : $embedCode;
 	}
 
 	/**
 	 * Apply replacements and additions to oembed URL
-	 * 
+	 *
 	 * @param $oembedURL
 	 * @param $videoURL
 	 * @param $videoID
 	 * @return string
-	 * 
+	 *
 	 */
 	protected function oembedURL($oembedURL, $videoURL, $videoID) {
 		$oembedURL = str_replace(
@@ -353,19 +355,19 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Wrap video embed code with responsive div
-	 * 
+	 *
 	 * @param string $embedCode
 	 * @param array $data
 	 * @return string
 	 *
 	 */
 	protected function ___wrapEmbedCode($embedCode, array $data) {
-		
+
 		$sanitizer = $this->wire()->sanitizer;
 		$frameStyles = $sanitizer->entities($this->frameStyles);
 		$wrapStyles = $sanitizer->entities($this->wrapStyles);
 		$pct = $this->aspectRatio === '0' ? 0 : (float) $this->aspectRatio;
-		
+
 		if($pct === 0) {
 			// auto aspect ratio
 			if(!empty($data['height']) && !empty($data['width'])) {
@@ -375,22 +377,53 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				$pct = '56.25'; // 16:9
 			}
 		}
-		
+
 		if($frameStyles) {
 			$frameStyles = str_replace(array('{pct}%', '{pct}', '{percent}%', '{percent}'), "$pct%", $frameStyles);
 			$embedCode = str_ireplace('<iframe ', "<iframe style='$frameStyles' ", $embedCode);
 		}
-		
+
 		if($wrapStyles) {
 			$wrapStyles = str_replace(array('{pct}%', '{pct}', '{percent}%', '{percent}'), "$pct%", $wrapStyles);
 			$out = "<div class='TextformatterVideoEmbed' style='$wrapStyles'>$embedCode</div>";
 		} else {
 			$out = "<div class='TextformatterVideoEmbed'>$embedCode</div>";
 		}
-		
+
+		if($this->getConsent){
+			$tmpCode = base64_encode($out);
+			$tmpId   = substr(md5($data['video_url']),0,8);
+			$privacyPolicyUrl = '/privacy-policy/';
+			$consentInfo = '(!) On click this will load data from an external video service:<br>
+			<small>' . $data['video_url'] . '</small><br>
+			See <a target="_blank" href="' .$privacyPolicyUrl . '">privacy policy</a>';
+			$consentInfoButtonLabel = 'Fine, lets load the video!';
+			$tmp = '
+			<div class="video-consent-wrap" id="wrap-'. $tmpId .'" data-code="' . $tmpCode . '" style="' . $wrapStyles . '">
+				<div class="video-consent-info" style="' . $frameStyles . '">
+					<div>
+						<p>' . $consentInfo . '</p>
+						<button class="video-consent-button" id="btn-' . $tmpId . '">' . $consentInfoButtonLabel . '</button>
+					</div>
+				</div>
+			</div>
+			';
+			$consentJs = '
+			<script>
+				var videoConsentWrap   = document.getElementById(\'wrap-' . $tmpId . '\');
+				var videoConsentButton = document.getElementById(\'btn-' . $tmpId . '\');
+				var videoEmbedCode     = atob(videoConsentWrap.getAttribute("data-code"));
+				videoConsentButton.addEventListener(\'click\', function(){
+					videoConsentWrap.innerHTML = videoEmbedCode;
+				},false);
+			</script>
+			';
+			$out = $tmp . $consentJs;
+		}
+
 		return $out;
 	}
-	
+
 	/**
 	 * Format the given text string with Page and Field provided.
 	 *
@@ -412,7 +445,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 * Here we look for video codes on first pass using a fast strpos() function.
 	 * When found, we do our second pass with preg_match_all and replace the video URLs
 	 * with the proper embed codes obtained from each service's oembed web service.
-	 * 
+	 *
 	 * @var string $str
 	 *
 	 */
@@ -420,7 +453,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$youtube = strpos($str, 'youtu') !== false;
 		$vimeo = strpos($str, 'vimeo.com') !== false;
 		if(!$youtube && !$vimeo) return;
-		if((strpos($str, 'https://') === 0 || strpos($str, 'http://') === 0) 
+		if((strpos($str, 'https://') === 0 || strpos($str, 'http://') === 0)
 			&& strpos($str, '<') === false && strpos(trim($str), ' ') === false) {
 			$originalStr = $str;
 			$paraStr = "<p>" . trim($str) . "</p>";
@@ -436,23 +469,23 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Check for Youtube URLS and embed when found
-	 * 
+	 *
 	 * @var string $str
 	 *
 	 */
 	protected function embedYoutube(&$str) {
-		
+
 		// perform fast check before performing regex check
-		if(strpos($str, '://www.youtube.com/watch') === false 
-			&& strpos($str, '://www.youtube.com/v/') === false 
+		if(strpos($str, '://www.youtube.com/watch') === false
+			&& strpos($str, '://www.youtube.com/v/') === false
 			&& strpos($str, '://youtu.be/') === false) return;
 
 		// 1: full URL, 2:video id, 3: query string (optional)
-		$regex = 
-			'#' . 
+		$regex =
+			'#' .
 			'<(?:p|h[1-6])' . // open tag <p or <h1, <h2, etc.
 			'(?:>|\s+[^>]+>)\s*' . // rest of open tag and close bracket
-			'(' . // capture #1: full URL 
+			'(' . // capture #1: full URL
 				'https?://(?:www\.)?youtu(?:\.be|be\.com)+/' . // scheme + host "https://youtu.be/"
 				'(?:watch/?\?v=|v/)?' . // optional "watch?v=" or "v/"
 				'([^\s&<\'"]+)' . // capture #2: video ID (U&LC letters, numbers)
@@ -460,18 +493,18 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			'((?:&|&amp;|\?)[-_,.=&;a-zA-Z0-9]*)?.*?' . // capture #3: optional query string
 			'</[ph123456]+>' . // close tag
 			'#';
-	
+
 		if(!preg_match_all($regex, $str, $matches)) return;
-		
+
 		$oembedUrl = "https://www.youtube.com/oembed?url={url}&format=json";
-		
+
 		foreach($matches[0] as $key => $line) {
 			$youtubeUrl = $matches[1][$key];
 			$videoID = $matches[2][$key];
 			$queryString = isset($matches[3][$key]) ? $matches[3][$key] : '';
-			$data = $this->getEmbedCode($oembedUrl, $videoID, $youtubeUrl); 
-			
-			if(is_int($data['embed_code'])) { 
+			$data = $this->getEmbedCode($oembedUrl, $videoID, $youtubeUrl);
+
+			if(is_int($data['embed_code'])) {
 				// http error code
 				if($this->lastHttpGetVideoID === $videoID) {
 					// http error code just now, try again using generated URL
@@ -481,10 +514,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 						$data = $this->getNewEmbedCode($oembedUrl, $videoID, $youtubeUrl2);
 					}
 				}
-			} 
-			
+			}
+
 			$embedCode = $data['embed_code'];
-			
+
 			if($data['valid']) {
 				if(strlen($queryString)) {
 					$queryString = str_replace('&amp;', '&', $queryString);
@@ -495,14 +528,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			} else {
 				$embedCode = $this->embedError($line, $youtubeUrl, $data);
 			}
-			
-			$str = str_replace($line, $embedCode, $str); 
+
+			$str = str_replace($line, $embedCode, $str);
 		}
 	}
 
 	/**
 	 * Check for Vimeo URLS and embed when found
-	 * 
+	 *
 	 * @var string $str
 	 *
 	 */
@@ -516,44 +549,44 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$videoID = $matches[2][$key];
 			$videoURL = "https://vimeo.com/$videoID";
 			$oembedURL = "https://vimeo.com/api/oembed.json?url={url}";
-			$data = $this->getEmbedCode($oembedURL, $videoID, $videoURL); 
+			$data = $this->getEmbedCode($oembedURL, $videoID, $videoURL);
 			if($data['valid']) {
 				$embedCode = $data['embed_code'];
 				$embedCode = $this->wrapEmbedCode($embedCode, $data);
 			} else {
-				$embedCode = $this->embedError($line, $videoURL, $data); 
+				$embedCode = $this->embedError($line, $videoURL, $data);
 			}
-			if($embedCode) $str = str_replace($line, $embedCode, $str); 
+			if($embedCode) $str = str_replace($line, $embedCode, $str);
 		}
 	}
 
 	/**
 	 * Render embed error
-	 * 
+	 *
 	 * @param string $line
 	 * @param string $videoURL
 	 * @param array $data
 	 * @return string
-	 * 
+	 *
 	 */
 	protected function ___embedError($line, $videoURL, $data) {
 		$openTag = substr($line, 0, strpos($line, '>')+1);
 		$closeTag = substr($line, strrpos($line, '</'));
 		if($this->failAction > 0) {
-			$out = "<!--{$videoURL} ($data[embed_code])-->"; 
+			$out = "<!--{$videoURL} ($data[embed_code])-->";
 		} else {
-			$out = "$openTag<span class='TextformatterVideoEmbedError'>$videoURL ($data[embed_code])</span>$closeTag"; 
+			$out = "$openTag<span class='TextformatterVideoEmbedError'>$videoURL ($data[embed_code])</span>$closeTag";
 		}
 		return $out;
 	}
 
 	/**
 	 * Clear one video from cache
-	 * 
+	 *
 	 * @param string $videoID
 	 * @return bool|int
 	 * @throws WireException
-	 * 
+	 *
 	 */
 	public function clearVideo($videoID) {
 		$table = self::dbTableName;
@@ -562,34 +595,34 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$result = $query->execute();
 		return $result ? $query->rowCount() : false;
 	}
-	
+
 	/**
-	 * Clear all cached video embed codes, forcing it to re-pull 
-	 * 
+	 * Clear all cached video embed codes, forcing it to re-pull
+	 *
 	 */
 	public function clearAllVideos() {
 		$this->wire()->database->query("DELETE FROM " . self::dbTableName);
-		$this->log("Cleared all video embeds"); 
+		$this->log("Cleared all video embeds");
 	}
 
 	/**
 	 * Get verbose data of videos (up to 100 or $options specified limit)
-	 * 
+	 *
 	 * @param array $options
 	 *  - `limit` (int): Max items to return (default=100)
 	 *  - `start` (int): Item to start with, -1 for auto according to current pageNum, 0 for first. (default=-1)
 	 *  - `sort` (string): How to sort items, one of 'created' (ascending), or `-created` (descending). (default=-created)
 	 * @return array
-	 * 
+	 *
 	 */
 	public function getVideos(array $options = array()) {
-		
+
 		$defaults = array(
-			'start' => -1, 
-			'limit' => 100, 
+			'start' => -1,
+			'limit' => 100,
 			'sort' => '-created',
 		);
-		
+
 		$sorts = array(
 			'created' => 'created',
 			'-created' => 'created DESC',
@@ -604,48 +637,48 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$orderBy = $sorts[$sort];
 		$start = (int) $options['start'];
 		$limit = (int) $options['limit'];
-		
+
 		if($limit > 0 && $start < 0) {
 			$start = ($this->wire()->input->pageNum() - 1) * $limit;
 		}
-		
-		$sql = 
-			"SELECT * FROM $table " . 
-			"ORDER BY $orderBy " . 
+
+		$sql =
+			"SELECT * FROM $table " .
+			"ORDER BY $orderBy " .
 			($limit ? "LIMIT $start,$limit" : "");
-		
+
 		$query = $database->prepare($sql);
 		$query->execute();
-		
+
 		while($row = $query->fetch(\PDO::FETCH_ASSOC)) {
 			$data = empty($row['data']) ? array() : json_decode($row['data'], true);
 			$row = array_merge($this->verboseDataDefaults, $row, $data);
 			$videos[] = $row;
 		}
-		
+
 		$query->closeCursor();
-		
+
 		return $videos;
 	}
 
 	/**
 	 * Get verbose data of all videos
-	 * 
+	 *
 	 * @param array $options
 	 * @return array
-	 * 
+	 *
 	 */
 	public function getAllVideos(array $options = array()) {
 		if(empty($options['limit'])) $options['limit'] = 0;
 		if(empty($options['start'])) $options['start'] = 0;
 		return $this->getVideos($options);
-	}	
+	}
 
 	/**
 	 * Get count of all videos currently in cache
-	 * 
+	 *
 	 * @return int
-	 * 
+	 *
 	 */
 	public function getNumVideos() {
 		$query = $this->wire()->database->prepare("SELECT COUNT(*) FROM " . self::dbTableName);
@@ -672,9 +705,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Get video sizes
-	 * 
+	 *
 	 * @return array
-	 * 
+	 *
 	 */
 	public function ___getVideoSizes() {
 		return array(
@@ -735,13 +768,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 	/**
 	 * Module configuration screen
-	 * 
+	 *
 	 * @param array $data
 	 * @return InputfieldWrapper
 	 *
 	 */
 	public function getModuleConfigInputfields(array $data) {
-	
+
 		$modules = $this->wire()->modules;
 		$input = $this->wire()->input;
 
@@ -769,11 +802,11 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		foreach($this->getVideoSizes() as $name => $info) {
 			$f->addOption($name, "$name: $info[label] ($info[width]x$info[height])");
 		}
-		$f->val($data['maxSize']); 
+		$f->val($data['maxSize']);
 		$fs->add($f);
 
 		/** @var InputfieldSelect $f */
-		$f = $modules->get('InputfieldSelect'); 
+		$f = $modules->get('InputfieldSelect');
 		$f->attr('name', 'aspectRatio');
 		$f->label = $this->_('Aspect ratio');
 		foreach($this->getAspectRatios() as $value => $label) {
@@ -782,29 +815,40 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->val($data['aspectRatio']);
 		$f->columnWidth = 50;
 		$fs->add($f);
-	
+
 		/** @var InputfieldCheckbox $f */
 		$f = $modules->get('InputfieldCheckbox');
-		$f->attr('name', 'noCookies'); 
+		$f->attr('name', 'noCookies');
 		$f->label = $this->_('GDPR: Use the no-cookie / do-not-track version of video URLs');
 		$f->attr('checked', $this->noCookies ? 'checked' : '');
 		$f->themeOffset = 1;
 		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
+		$f->columnWidth = 50;
 		$inputfields->add($f);
-	
+
+		/** @var InputfieldCheckbox $f */
+		$f = $modules->get('InputfieldCheckbox');
+		$f->attr('name', 'getConsent');
+		$f->label = $this->_('GDPR: display a consent button before displaying the embedded video.');
+		$f->attr('checked', $this->getConsent ? 'checked' : '');
+		$f->themeOffset = 1;
+		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
+		$f->columnWidth = 50;
+		$inputfields->add($f);
+
 		/** @var InputfieldRadios $f */
 		$f = $modules->get('InputfieldRadios');
-		$f->attr('name', 'failAction'); 
+		$f->attr('name', 'failAction');
 		$f->label = $this->_('Fail action');
-		$f->description = $this->_('What to do with a video URL that the service returns an error for.'); 
-		$f->notes = $this->_('Note that errors and other activity is logged in Setup > Logs > textformatter-video-embed.'); 
-		$f->addOption(0, sprintf($this->_('Leave the URL, span-wrap it and append error code i.e. `%s`'), "<span class='TextformatterVideoEmbedError'>https://youtu.be/abc123 (404)</span>")); 
-		$f->addOption(1, sprintf($this->_('Add HTML comment around the video URL to hide it, i.e. `%s`'), "<!--https://youtu.be/abc123 (404)-->")); 
+		$f->description = $this->_('What to do with a video URL that the service returns an error for.');
+		$f->notes = $this->_('Note that errors and other activity is logged in Setup > Logs > textformatter-video-embed.');
+		$f->addOption(0, sprintf($this->_('Leave the URL, span-wrap it and append error code i.e. `%s`'), "<span class='TextformatterVideoEmbedError'>https://youtu.be/abc123 (404)</span>"));
+		$f->addOption(1, sprintf($this->_('Add HTML comment around the video URL to hide it, i.e. `%s`'), "<!--https://youtu.be/abc123 (404)-->"));
 		if(!$this->failAction) $f->collapsed = Inputfield::collapsedYes;
 		$f->val((int) $this->failAction);
 		$f->themeOffset = 1;
 		$inputfields->add($f);
-	
+
 		/** @var InputfieldFieldset $fs */
 		$fs = $modules->get('InputfieldFieldset');
 		$fs->attr('name', '_fs_styles');
@@ -813,16 +857,16 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$fs->collapsed = Inputfield::collapsedYes;
 		$fs->themeOffset = 1;
 		$inputfields->add($fs);
-		
+
 		/** @var InputfieldText $f */
 		$f = $modules->get('InputfieldText');
-		$f->attr('name', 'wrapStyles'); 
+		$f->attr('name', 'wrapStyles');
 		$f->label = $this->_('Wrap styles');
-		$f->description = $this->_('Inline styles applied to `div.TextformatterVideoEmbed` element that wraps the video embed `iframe`.'); 
+		$f->description = $this->_('Inline styles applied to `div.TextformatterVideoEmbed` element that wraps the video embed `iframe`.');
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['wrapStyles'] . '`';
 		$f->val($data['wrapStyles']);
 		$fs->add($f);
-		
+
 		/** @var InputfieldText $f */
 		$f = $modules->get('InputfieldText');
 		$f->attr('name', 'frameStyles');
@@ -831,7 +875,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['frameStyles'] . '`';
 		$f->val($data['frameStyles']);
 		$fs->add($f);
-		
+
 		/** @var InputfieldFieldset $fs */
 		$fs = $modules->get('InputfieldFieldset');
 		$fs->attr('name', '_fs_cache');
@@ -849,7 +893,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		if($input->post('_clearCache')) {
 			$this->clearAllVideos();
-			$modules->message(__('Cleared video embed cache')); 
+			$modules->message(__('Cleared video embed cache'));
 			$numVideos = 0;
 		} else {
 			/** @var InputfieldCheckbox $f */
@@ -863,13 +907,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			if(!$numVideos) $f->collapsed = Inputfield::collapsedYes;
 			$fs->add($f);
 		}
-		
+
 		/** @var InputfieldMarkup $f */
 		$f = $modules->get('InputfieldMarkup');
-		$f->attr('name', '_video_list'); 
+		$f->attr('name', '_video_list');
 		$f->label = $this->_('Recently embedded videos in cache (up to 100)');
 		$fs->add($f);
-		
+
 		if($numVideos > 0) {
 			/** @var MarkupAdminDataTable $table */
 			$table = $modules->get('MarkupAdminDataTable');
@@ -883,7 +927,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				}
 				$thumbUrl = $video['thumbnail_url'];
 				$thumb = $thumbUrl ? "<img width='200' src='$thumbUrl' alt='' />" : "&nbsp;";
-				$page = $this->wire()->pages->get((int) $video['page_id']); 
+				$page = $this->wire()->pages->get((int) $video['page_id']);
 				$table->headerRow(array(
 					'Thumb',
 					'Title',
@@ -896,12 +940,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				));
 				$table->row(array(
 					"<a target='_blank' href='$video[video_url]'>$thumb</a>",
-					"<a target='_blank' href='$video[video_url]'>$video[title]</a>", 
-					"<a target='_blank' href='$video[author_url]'>$video[author_name]</a>", 
-					"$video[provider_name]", 
+					"<a target='_blank' href='$video[video_url]'>$video[title]</a>",
+					"<a target='_blank' href='$video[author_url]'>$video[author_name]</a>",
+					"$video[provider_name]",
 					"$video[width]x$video[height]",
 					wireRelativeTimeStr($video['created'], true),
-					"<a href='$page->url'>" . $page->get('title|name') . "</a>", 
+					"<a href='$page->url'>" . $page->get('title|name') . "</a>",
 					"$video[field]",
 				));
 			}
@@ -910,7 +954,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$f->value = "<p>" . $this->_('There are currently no videos in the cache.') . "</p>";
 		}
 
-		return $inputfields; 		
+		return $inputfields;
 	}
 
 	/**
@@ -921,26 +965,26 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 		/** @var WireDatabasePDO $database */
 		$database = $this->wire('database');
-		$sql =	
-			"CREATE TABLE " . self::dbTableName . " (" . 
-			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " . 
-			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " . 
+		$sql =
+			"CREATE TABLE " . self::dbTableName . " (" .
+			"video_id VARCHAR(128) NOT NULL PRIMARY KEY, " .
+			"embed_code VARCHAR(1024) NOT NULL DEFAULT '', " .
 			"created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, " .
-			"`data` TEXT, " . 
-			"INDEX created (created) " . 
+			"`data` TEXT, " .
+			"INDEX created (created) " .
 			")";
 
 		$database->exec($sql);
-		
+
 		$this->log('Module installed');
 	}
 
 	/**
 	 * Upgrade
-	 * 
+	 *
 	 * @param $fromVersion
 	 * @param $toVersion
-	 * 
+	 *
 	 */
 	public function ___upgrade($fromVersion, $toVersion) {
 		if($fromVersion || $toVersion) {}
@@ -951,9 +995,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$numRows = (int) $query->rowCount();
 		if(!$numRows) {
 			$this->clearAllVideos();
-			$query = $database->prepare("ALTER TABLE `$table` ADD `data` TEXT"); 
+			$query = $database->prepare("ALTER TABLE `$table` ADD `data` TEXT");
 			$query->execute();
-			$this->log("Added 'data' column to table: $table"); 
+			$this->log("Added 'data' column to table: $table");
 		}
 	}
 
@@ -974,7 +1018,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	/**
 	 * The following functions are to support the ConfigurableModule interface
 	 * since Textformatter does not originate from WireData
-	 * 
+	 *
 	 * @param string $key
 	 * @param mixed $value
 	 * @return $this
@@ -982,25 +1026,25 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 	 */
 	public function set($key, $value) {
 		if($key === 'nocookies') $key = 'noCookies';
-		$this->data[$key] = $value; 
+		$this->data[$key] = $value;
 		return $this;
 	}
 
 	/**
 	 * Get configuration item
-	 * 
+	 *
 	 * @param string $key
 	 * @return mixed
 	 *
 	 */
 	public function get($key) {
-		$value = $this->wire($key); 
-		if($value) return $value; 
+		$value = $this->wire($key);
+		if($value) return $value;
 		return isset($this->data[$key]) ? $this->data[$key] : null;
 	}
 
 	public function __set($key, $value) {
-		$this->set($key, $value); 
+		$this->set($key, $value);
 	}
 
 	public function __get($key) {
