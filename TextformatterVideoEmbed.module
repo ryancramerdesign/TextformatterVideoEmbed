@@ -404,7 +404,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$consentInfo = $this->consentInfo . '<br>
 			<small>' . $data['video_url'] . '</small>';
 			if ( $this->consentPrivacyPage ) {
-				$privacyUrl = wire('pages')->get($this->consentPrivacyPage)->url;
+				$privacyUrl = $this->wire()->pages->get((int) $this->consentPrivacyPage)->url;
 			}
 			if ( $this->consentPrivacyUrl ) {
 				$privacyUrl = $this->consentPrivacyUrl;
