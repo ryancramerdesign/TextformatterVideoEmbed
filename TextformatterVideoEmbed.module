@@ -401,6 +401,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		if($this->getConsent){
 			$tmpCode = base64_encode($out);
 			$tmpId   = substr(md5($data['video_url']),0,8);
+			// user has seen and consented loading of this video before, so show the embed
+			// the consent is stored in a session-cookie
+			if (  $this->wire()->input->cookie('videoconsent-'.$tmpId) == 'yes' ) {
+				return $out;
+			}
+			// no prior consent, so show the consent info
 			$consentInfo = $this->consentInfo . '<br>
 			<small>' . $data['video_url'] . '</small>';
 			if ( $this->consentPrivacyPage ) {
@@ -417,7 +423,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				<div class="video-consent-info" style="' . $frameStyles . '">
 					<div>
 						<p>' . $consentInfo . '</p>
-						<button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button>
+						<p><label><input type="checkbox" name="consent-ok" value="' . $tmpId . '" id="check-'. $tmpId .'">Remember my decision for this video</label></p>
+						<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button></p>
 					</div>
 				</div>
 			</div>
@@ -426,9 +433,13 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			<script>
 				var videoConsentWrap   = document.getElementById(\'wrap-' . $tmpId . '\');
 				var videoConsentButton = document.getElementById(\'btn-' . $tmpId . '\');
+				var videoConsentCheck  = document.getElementById(\'check-' . $tmpId . '\');
 				var videoEmbedCode     = atob(videoConsentWrap.getAttribute("data-code"));
 				videoConsentButton.addEventListener(\'click\', function(){
 					videoConsentWrap.innerHTML = videoEmbedCode;
+					if ( videoConsentCheck.value == \'' . $tmpId . '\') {
+						document.cookie = \'videoconsent-' . $tmpId . '=yes\';
+					}
 				},false);
 			</script>
 			';
@@ -833,7 +844,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$fs = $modules->get('InputfieldFieldset');
 		$fs->attr('name', '_fs_gdpr');
 		$fs->label = $this->_('GDPR Options');
-		$fs->description = $this->_('These settings affect the embed code that is used. As a result, if you change these settings you should clear your video cache afterwards (when videos already present).');
 		$fs->themeOffset = 1;
 		$inputfields->add($fs);
 
@@ -841,8 +851,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f = $modules->get('InputfieldCheckbox');
 		$f->attr('name', 'noCookies');
 		$f->label = $this->_('GDPR: Use the no-cookie / do-not-track version of video URLs');
+		$f->notes = $this->_('This setting affects the embed code that is used. As a result, if you change this setting you should clear your video cache afterwards (when videos already present).');
 		$f->attr('checked', $this->noCookies ? 'checked' : '');
-		$f->columnWidth = 50;
 		$fs->add($f);
 
 		/** @var InputfieldCheckbox $f */
@@ -850,7 +860,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->attr('name', 'getConsent');
 		$f->label = $this->_('GDPR: display a consent button before displaying the embedded video.');
 		$f->attr('checked', $this->getConsent ? 'checked' : '');
-		$f->columnWidth = 50;
 		$fs->add($f);
 
 		/** @var InputfieldText $f */
@@ -859,6 +868,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->label = $this->_('Consent info');
 		$f->description = $this->_('Info to be shown with the consent button.');
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentInfo'] . '`';
+		$f->showIf('getConsent=1');
 		$f->val($data['consentInfo']);
 		$f->columnWidth = 50;
 		$fs->add($f);
@@ -869,6 +879,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->label = $this->_('Consent button label');
 		$f->description = $this->_('Text of the consent button');
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentButtonLabel'] . '`';
+		$f->showIf('getConsent=1');
 		$f->val($data['consentButtonLabel']);
 		$f->columnWidth = 50;
 		$fs->add($f);
@@ -880,6 +891,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->attr('value', (int) $this->consentPrivacyPage);
 		$f->description = $this->_('Select the page with the privacy policy info');
 		$f->notes = 'If set, a link to the privacy info is added to the info.';
+		$f->showIf('getConsent=1');
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
 		$fs->add($f);
@@ -890,6 +902,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->label = $this->_('Privacy info url');
 		$f->description = $this->_('Link to the privacy info');
 		$f->notes = 'If set, a link to the privacy info is added to the info. Overrides the privacy info page url if set.';
+		$f->showIf('getConsent=1');
 		$f->val($data['consentPrivacyUrl']);
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
