@@ -871,6 +871,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentInfo'] . '`';
 		$f->showIf('getConsent=1');
 		$f->val($data['consentInfo']);
+		$f->useLanguages = true;
 		$f->columnWidth = 50;
 		$fs->add($f);
 
@@ -882,6 +883,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentButtonLabel'] . '`';
 		$f->showIf('getConsent=1');
 		$f->val($data['consentButtonLabel']);
+		$f->useLanguages = true;
 		$f->columnWidth = 50;
 		$fs->add($f);
 
@@ -891,7 +893,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->label = $this->_('Privacy info page');
 		$f->attr('value', (int) $this->consentPrivacyPage);
 		$f->description = $this->_('Select the page with the privacy policy info');
-		$f->notes = 'If set, a link to the privacy info is added to the info.';
+		$f->notes = $this->_('If set, a link to the privacy info is added to the info.');
 		$f->showIf('getConsent=1');
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
@@ -902,7 +904,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->attr('name', 'consentPrivacyUrl');
 		$f->label = $this->_('Privacy info url');
 		$f->description = $this->_('Link to the privacy info');
-		$f->notes = 'If set, a link to the privacy info is added to the info. Overrides the privacy info page url if set.';
+		$f->notes = $this->_('If set, a link to the privacy info is added to the info. Overrides the privacy info page url if set.');
 		$f->showIf('getConsent=1');
 		$f->val($data['consentPrivacyUrl']);
 		$f->collapsed = Inputfield::collapsedBlank;
