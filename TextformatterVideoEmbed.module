@@ -402,7 +402,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			$tmpId   = substr(md5($data['video_url']),0,8);
 			// user has seen and consented loading of this video before, so show the embed
 			// the consent is stored in a session-cookie
-			if (  $this->wire()->input->cookie('videoconsent-'.$tmpId) == 'yes' ) {
+			if (  $this->wire()->input->cookie('videoconsent-'.$tmpId) == 'yes' ||  $this->wire()->input->cookie('videoconsent-all') == 'yes') {
 				return $out;
 			}
 			// no prior consent, so show the consent info
@@ -424,7 +424,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				<div class="video-consent-info" style="' . $frameStyles . '">
 					<div>
 						<p>' . $consentInfo . '</p>
-						<p><label><input type="checkbox" class="video-consent-checkbox" name="consent-ok" value="' . $tmpId . '" id="check-'. $tmpId .'">' . $this->_('Remember my decision for this video') . '</label></p>
+						<p>' . _('Remember my decision') . ' <label><input type="checkbox" class="video-consent-checkbox" name="consent-ok" value="' . $tmpId . '" id="check-'. $tmpId .'">' . $this->_('for this video') . '</label>
+						<label><input type="checkbox" class="video-consent-checkbox" name="consent-ok-all" value="ok" id="check-all">' . $this->_('for all videos') . '</label>
+						</p>
 						<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button></p>
 					</div>
 				</div>
@@ -432,14 +434,18 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			';
 			$consentJs = '
 			<script>
-				var videoConsentWrap   = document.getElementById(\'wrap-' . $tmpId . '\');
-				var videoConsentButton = document.getElementById(\'btn-' . $tmpId . '\');
-				var videoConsentCheck  = document.getElementById(\'check-' . $tmpId . '\');
-				var videoEmbedCode     = atob(videoConsentWrap.getAttribute("data-code"));
+				var videoConsentWrap     = document.getElementById(\'wrap-' . $tmpId . '\');
+				var videoConsentButton   = document.getElementById(\'btn-' . $tmpId . '\');
+				var videoConsentCheck    = document.getElementById(\'check-' . $tmpId . '\');
+				var videoConsentAllCheck = document.getElementById(\'check-all\');
+				var videoEmbedCode       = atob(videoConsentWrap.getAttribute("data-code"));
 				videoConsentButton.addEventListener(\'click\', function(){
 					videoConsentWrap.innerHTML = videoEmbedCode;
 					if ( videoConsentCheck.value == \'' . $tmpId . '\') {
 						document.cookie = \'videoconsent-' . $tmpId . '=yes\';
+					}
+					if ( videoConsentAllCheck.value == \'ok\') {
+						document.cookie = \'videoconsent-all=yes; path=/\';
 					}
 				},false);
 			</script>
