@@ -399,7 +399,6 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		}
 
 		if($this->getConsent){
-			$tmpCode = base64_encode($out);
 			$tmpId   = substr(md5($data['video_url']),0,8);
 			// user has seen and consented loading of this video before, so show the embed
 			// the consent is stored in a session-cookie
@@ -407,6 +406,8 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				return $out;
 			}
 			// no prior consent, so show the consent info
+			// store the original embed in base64 to use it as data-attr later for replacement
+			$tmpCode = base64_encode($out);
 			$consentInfo = $this->consentInfo . '<br>
 			<small>' . $data['video_url'] . '</small>';
 			if ( $this->consentPrivacyPage ) {
@@ -423,7 +424,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				<div class="video-consent-info" style="' . $frameStyles . '">
 					<div>
 						<p>' . $consentInfo . '</p>
-						<p><label><input type="checkbox" name="consent-ok" value="' . $tmpId . '" id="check-'. $tmpId .'">Remember my decision for this video</label></p>
+						<p><label><input type="checkbox" class="video-consent-checkbox" name="consent-ok" value="' . $tmpId . '" id="check-'. $tmpId .'">' . $this->_('Remember my decision for this video') . '</label></p>
 						<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button></p>
 					</div>
 				</div>
