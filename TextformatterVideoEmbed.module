@@ -442,7 +442,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				videoConsentButton.addEventListener(\'click\', function(){
 					videoConsentWrap.innerHTML = videoEmbedCode;
 					if ( videoConsentCheck.value == \'' . $tmpId . '\') {
-						document.cookie = \'videoconsent-' . $tmpId . '=yes\';
+						document.cookie = \'videoconsent-' . $tmpId . '=yes; path=/\';
 					}
 					if ( videoConsentAllCheck.value == \'ok\') {
 						document.cookie = \'videoconsent-all=yes; path=/\';
