@@ -25,6 +25,8 @@
  * @property string $consentButtonLabel
  * @property string $consentPrivacyUrl
  * @property int $consentPrivacyPage
+ * @property string $consentCheckboxesLabel
+ * @property string $consentPrivacyLabel
  *
  * @method array getAspectRatios()
  * @method array getVideoSizes()
@@ -68,7 +70,9 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'consentInfo' => '(i) Click on this will load data from an external video service:',
 		'consentButtonLabel' => 'Fine, lets load this video!',
 		'consentPrivacyUrl' => '',
-		'consentPrivacyPage' => []
+		'consentPrivacyPage' => 0,
+		'consentCheckboxesLabel' => 'Remember my decision for %1$s this video %2$s for all videos',
+		'consentPrivacyLabel' => 'See: %1$s'
 	);
 
 	/**
@@ -409,23 +413,40 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				$consentInfo = $this->consentInfo . '<br>
 				<small>' . $data['video_url'] . '</small>';
 				if ( $this->consentPrivacyPage ) {
+					$privacyLinkName = $this->wire()->pages->get((int) $this->consentPrivacyPage)->title;
 					$privacyUrl = $this->wire()->pages->get((int) $this->consentPrivacyPage)->url;
 				}
 				if ( $this->consentPrivacyUrl ) {
+					$privacyLinkName = 'Privacy Policy';
 					$privacyUrl = $this->consentPrivacyUrl;
 				}
 				if ( !empty($privacyUrl) ) {
-					$consentInfo .= '<br>See <a target="_blank" href="' . $privacyUrl . '">privacy policy</a>';
+					$consentInfo .= '<br>' . sprintf( $this->consentPrivacyLabel,'<a target="_blank" href="' . $privacyUrl . '">' . $privacyLinkName . '</a>');
+				}
+				if ( $data['thumbnail_url'] ) {
+					$path = pathinfo( $data['thumbnail_url'] );
+					// abs path to cache dir:
+					$cacheDir = $this->wire()->config->paths->assets . 'VideoEmbed';
+					if ( !is_dir( $cacheDir ) ) {
+						// create cache dir
+						mkdir( $cacheDir );
+					}
+					// check for chached cover img
+					$cover = $tmpId . '.' . $path['extension'];
+					$coverFile = $cacheDir . '/' . $cover;
+					if ( !is_file( $coverFile ) ) {
+						$http = $this->wire(new WireHttp);
+						$coverImg = $http->download($data['thumbnail_url'],$coverFile);
+					}
+					$coverLocal = $this->wire()->config->urls->assets . 'VideoEmbed/' . $cover;
+					$frameStyles .= ' background-image:linear-gradient(to bottom,rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.8) 100%),url('. $coverLocal . ');background-size: cover;background-position:center;color:#fff;';
 				}
 				$tmp = '
 				<div class="video-consent-wrap" id="wrap-'. $tmpId .'" data-code="' . $tmpCode . '" style="' . $wrapStyles . '">
 					<div class="video-consent-info" style="' . $frameStyles . '">
 						<div>
 							<p>' . $consentInfo . '</p>
-							<p>' . _('Remember my decision') . '
-							<label><input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">' . $this->_('for this video') . '</label>
-							<label><input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">' . $this->_('for all videos') . '</label>
-							</p>
+							<p>' . sprintf($this->consentCheckboxesLabel,'<label><input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">','<label><input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">') . '</p>
 							<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button></p>
 						</div>
 					</div>
@@ -453,6 +474,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				$out = $tmp . $consentJs;
 			}
 		}
+
 		return $out;
 	}
 
@@ -913,6 +935,31 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$f->notes = $this->_('If set, a link to the privacy info is added to the info. Overrides the privacy info page url if set.');
 		$f->showIf('getConsent=1');
 		$f->val($data['consentPrivacyUrl']);
+		$f->collapsed = Inputfield::collapsedBlank;
+		$f->columnWidth = 50;
+		$fs->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'consentPrivacyLabel');
+		$f->label = $this->_('Text/Label for the privacy link');
+		$f->description = $this->_('Text displayed in the frontend');
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentPrivacyLabel'] . ' `' . ' (Placeholder: `%1$s`: privacy link)';
+		$f->showIf('getConsent=1');
+		$f->useLanguages = true;
+		$f->val($data['consentPrivacyLabel']);
+		$f->collapsed = Inputfield::collapsedBlank;
+		$fs->add($f);
+
+		/** @var InputfieldText $f */
+		$f = $modules->get('InputfieldText');
+		$f->attr('name', 'consentCheckboxesLabel');
+		$f->label = $this->_('Text/Label for checkboxes');
+		$f->description = $this->_('Text displayed in the frontend');
+		$f->notes = $this->_('Default:') . ' `' . $this->configDefaults['consentCheckboxesLabel'] . ' `' . ' (Checkbox placeholders: `%1$s`: current video `%2$s`: all videos)';
+		$f->showIf('getConsent=1');
+		$f->useLanguages = true;
+		$f->val($data['consentCheckboxesLabel']);
 		$f->collapsed = Inputfield::collapsedBlank;
 		$f->columnWidth = 50;
 		$fs->add($f);
