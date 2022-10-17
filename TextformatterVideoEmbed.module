@@ -409,8 +409,16 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 			if (  !$this->wire()->input->cookie('videoconsent-'.$tmpId) == 'yes' &&  !$this->wire()->input->cookie('videoconsent-all') == 'yes') {
 				// store the original embed in base64 to use it as data-attr later for replacement
 				$tmpCode = base64_encode($out);
+
+				// set outputs for multilanguage
+				$lang = $this->wire->user->language;
+				$consentInfo            = ( $lang->name != 'default' ) ? $this->get("consentInfo__". $lang->id)            : $this->get("consentInfo");
+				$consentCheckboxesLabel = ( $lang->name != 'default' ) ? $this->get("consentCheckboxesLabel__". $lang->id) : $this->get("consentCheckboxesLabel");
+				$consentButtonLabel     = ( $lang->name != 'default' ) ? $this->get("consentButtonLabel__". $lang->id)     : $this->get("consentButtonLabel");
+				$consentPrivacyLabel    = ( $lang->name != 'default' ) ? $this->get("consentPrivacyLabel__". $lang->id)    : $this->get("consentPrivacyLabel");
+
 				// no prior consent, so show the consent info
-				$consentInfo = $this->consentInfo . '<br>
+				$consentInfo .= '<br>
 				<small>' . $data['video_url'] . '</small>';
 				if ( $this->consentPrivacyPage ) {
 					$privacyLinkName = $this->wire()->pages->get((int) $this->consentPrivacyPage)->title;
@@ -421,7 +429,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 					$privacyUrl = $this->consentPrivacyUrl;
 				}
 				if ( !empty($privacyUrl) ) {
-					$consentInfo .= '<br>' . sprintf( $this->consentPrivacyLabel,'<a target="_blank" href="' . $privacyUrl . '">' . $privacyLinkName . '</a>');
+					$consentInfo .= '<br>' . sprintf($consentPrivacyLabel,'<a target="_blank" href="' . $privacyUrl . '">' . $privacyLinkName . '</a>');
 				}
 				if ( $data['thumbnail_url'] ) {
 					$path = pathinfo( $data['thumbnail_url'] );
@@ -441,13 +449,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 					$coverLocal = $this->wire()->config->urls->assets . 'VideoEmbed/' . $cover;
 					$frameStyles .= ' background-image:linear-gradient(to bottom,rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.8) 100%),url('. $coverLocal . ');background-size: cover;background-position:center;color:#fff;';
 				}
+
 				$tmp = '
 				<div class="video-consent-wrap" id="wrap-'. $tmpId .'" data-code="' . $tmpCode . '" style="' . $wrapStyles . '">
 					<div class="video-consent-info" style="' . $frameStyles . '">
 						<div>
 							<p>' . $consentInfo . '</p>
-							<p>' . sprintf($this->consentCheckboxesLabel,'<label><input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">','<label><input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">') . '</p>
-							<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $this->consentButtonLabel . '</button></p>
+							<p>' . sprintf($consentCheckboxesLabel,'<label><input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">','<label><input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">') . '</p>
+							<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $consentButtonLabel . '</button></p>
 						</div>
 					</div>
 				</div>
