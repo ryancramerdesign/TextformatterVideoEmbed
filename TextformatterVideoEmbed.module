@@ -412,10 +412,10 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 
 				// set outputs for multilanguage
 				$lang = $this->wire->user->language;
-				$consentInfo            = ( $lang->name != 'default' ) ? $this->get("consentInfo__". $lang->id)            : $this->get("consentInfo");
-				$consentCheckboxesLabel = ( $lang->name != 'default' ) ? $this->get("consentCheckboxesLabel__". $lang->id) : $this->get("consentCheckboxesLabel");
-				$consentButtonLabel     = ( $lang->name != 'default' ) ? $this->get("consentButtonLabel__". $lang->id)     : $this->get("consentButtonLabel");
-				$consentPrivacyLabel    = ( $lang->name != 'default' ) ? $this->get("consentPrivacyLabel__". $lang->id)    : $this->get("consentPrivacyLabel");
+				$consentInfo            = ( $lang->name && $lang->name != 'default' ) ? $this->get("consentInfo__". $lang->id)            : $this->get("consentInfo");
+				$consentCheckboxesLabel = ( $lang->name && $lang->name != 'default' ) ? $this->get("consentCheckboxesLabel__". $lang->id) : $this->get("consentCheckboxesLabel");
+				$consentButtonLabel     = ( $lang->name && $lang->name != 'default' ) ? $this->get("consentButtonLabel__". $lang->id)     : $this->get("consentButtonLabel");
+				$consentPrivacyLabel    = ( $lang->name && $lang->name != 'default' ) ? $this->get("consentPrivacyLabel__". $lang->id)    : $this->get("consentPrivacyLabel");
 
 				// no prior consent, so show the consent info
 				$consentInfo .= '<br>
