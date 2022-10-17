@@ -1140,6 +1140,12 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		$log = $this->wire()->log;
 		$logFile = $log->getFilename(self::logName);
 		if(is_file($logFile)) $log->delete(self::logName);
+
+		$cacheDir = $this->wire()->config->paths->assets . 'VideoEmbed';
+		if($cacheDir && is_dir($cacheDir)) {
+			$this->message("Removing cache path: $cacheDir");
+			$this->wire()->files->rmdir($cacheDir, true);
+		}
 	}
 
 
