@@ -463,14 +463,14 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 				';
 				$consentJs = '
 				<script>
-					var videoConsentWrap   = document.getElementById(\'wrap-' . $tmpId . '\');
-					var videoConsentButton = document.getElementById(\'btn-' . $tmpId . '\');
-					var videoEmbedCode     = atob(videoConsentWrap.getAttribute("data-code"));
+					var videoConsentWrap_' . $tmpId . '    = document.getElementById(\'wrap-' . $tmpId . '\');
+					var videoConsentButton_' . $tmpId . '  = document.getElementById(\'btn-' . $tmpId . '\');
+					var videoEmbedCode_' . $tmpId . '      = atob(videoConsentWrap_' . $tmpId . ' .getAttribute("data-code"));
 					var videoConsentCheckSingle = document.getElementById(\'check-single-' . $tmpId . '\');
 					var videoConsentCheckAll    = document.getElementById(\'check-all-' . $tmpId . '\');
-					videoConsentButton.addEventListener(\'click\', function(){
-						videoConsentWrap.setAttribute(\'style\',\'\');
-						videoConsentWrap.innerHTML = videoEmbedCode;
+					videoConsentButton_' . $tmpId . '.addEventListener(\'click\', function(){
+						videoConsentWrap_' . $tmpId . ' .setAttribute(\'style\',\'\');
+						videoConsentWrap_' . $tmpId . ' .innerHTML = videoEmbedCode_' . $tmpId . ';
 						if ( videoConsentCheckSingle.checked ) {
 							document.cookie = \'videoconsent-' . $tmpId . '=yes; path=/\';
 						}
