@@ -71,7 +71,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 		'consentButtonLabel' => 'Fine, lets load this video!',
 		'consentPrivacyUrl' => '',
 		'consentPrivacyPage' => 0,
-		'consentCheckboxesLabel' => 'Remember my decision for %1$s this video %2$s for all videos',
+		'consentCheckboxesLabel' => 'Remember my decision for <label>%1$s this video</label> <label>%2$s for all videos</label>',
 		'consentPrivacyLabel' => 'See: %1$s'
 	);
 
@@ -455,7 +455,7 @@ class TextformatterVideoEmbed extends Textformatter implements ConfigurableModul
 					<div class="video-consent-info" style="' . $frameStyles . '">
 						<div>
 							<p>' . $consentInfo . '</p>
-							<p>' . sprintf($consentCheckboxesLabel,'<label><input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">','<label><input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">') . '</p>
+							<p>' . sprintf($consentCheckboxesLabel,'<input type="checkbox" id="check-single-' . $tmpId .'" class="video-consent-checkbox" name="consent-video" value="ok">','<input type="checkbox" id="check-all-' . $tmpId . '" class="video-consent-checkbox" name="consent-video" value="all">') . '</p>
 							<p><button class="video-consent-button" id="btn-' . $tmpId . '">' . $consentButtonLabel . '</button></p>
 						</div>
 					</div>
